@@ -1,0 +1,25 @@
+name: ContaFlow tests
+
+on:
+  push:
+    branches: [codex/contaflow-sviluppo]
+  pull_request:
+    branches: [codex/contaflow-sviluppo]
+
+permissions:
+  contents: read
+
+jobs:
+  unittest:
+    # Enable after confirming that paid Actions overages are blocked.
+    if: vars.CONTAFLOW_INCLUDED_USAGE_ONLY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -v
