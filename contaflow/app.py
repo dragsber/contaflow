@@ -5,7 +5,11 @@ from .store import Store
 class App(tk.Tk):
  def __init__(self):
   super().__init__(); self.title('ContaFlow'); self.geometry('1000x650'); self.store=Store()
-  bar=ttk.Frame(self,padding=10);bar.pack(fill='x');ttk.Label(bar,text='ContaFlow · Finanza personale',font=('Segoe UI',18,'bold')).pack(side='left');ttk.Button(bar,text='Importa CSV Revolut',command=self.import_csv).pack(side='right')
+  bar=ttk.Frame(self,padding=10);bar.pack(fill='x');ttk.Label(bar,text='ContaFlow · Finanza personale',font=('Segoe UI',18,'bold')).pack(side='left')
+  self.account_var=tk.StringVar(value='Revolut EUR')
+  self.account_box=ttk.Combobox(bar,textvariable=self.account_var,state='readonly',width=18,values=[r['name'] for r in self.store.db.execute('SELECT name FROM accounts ORDER BY id')])
+  self.account_box.pack(side='right',padx=8)
+  ttk.Button(bar,text='Importa CSV Revolut',command=self.import_csv).pack(side='right')
   self.cards=ttk.Frame(self,padding=10);self.cards.pack(fill='x')
   ttk.Label(self,text='Movimenti recenti',font=('Segoe UI',13,'bold')).pack(anchor='w',padx=12)
   self.table=ttk.Treeview(self,columns=('date','description','amount','currency','type'),show='headings');
@@ -21,6 +25,6 @@ class App(tk.Tk):
   p=filedialog.askopenfilename(filetypes=[('CSV','*.csv')]);
   if not p:return
   try:
-   n,s=self.store.import_revolut(p);self.refresh();messagebox.showinfo('Importazione',f'Importati {n}; duplicati o non completati saltati: {s}')
+   n,s=self.store.import_revolut(p,self.account_var.get());self.refresh();messagebox.showinfo('Importazione',f'Importati {n}; duplicati o non completati saltati: {s}')
   except Exception as e: messagebox.showerror('Errore importazione',str(e))
 def main(): App().mainloop()
