@@ -34,6 +34,7 @@ class AccountScopeTests(unittest.TestCase):
             store = Store(path)
             self.assertEqual(store.db.execute("SELECT provider FROM accounts WHERE name='Revolut EUR'").fetchone()[0], 'REVOLUT')
             self.assertEqual({row['provider'] for row in store.accounts()}, {'REVOLUT','BPER','CASH'})
+            self.assertEqual(store.db.execute('SELECT version FROM schema_version').fetchone()[0], 1)
             store.db.close()
 
     def test_account_filter_and_balance_are_scoped(self):
