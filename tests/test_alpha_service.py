@@ -35,6 +35,39 @@ class AlphaServiceTests(unittest.TestCase):
         self.service.archive_category(renamed_category_id)
         self.assertNotIn(renamed_category_id, [row["id"] for row in self.service.categories()])
 
+    def test_backup_and_restore_preserves_synthetic_database(self):
+        account_id = self.store.db.execute(
+            "SELECT id FROM accounts WHERE name='Revolut EUR'"
+        ).fetchone()["id"]
+        with self.store.db:
+            self.store.db.execute(
+                "INSERT INTO transactions(fingerprint,account_id,occurred_at,description,"
+                "amount,currency,fee,kind,status,source_json) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                ("synthetic-backup", account_id, "2026-02-01", "BACKUP TEST",
+                 -3.0, "EUR", 0.0, "CARD_PAYMENT", "COMPLETATO", "{}"),
+            )
+        backup = Path(self.temp.name) / "saved.sqlite3"
+        self.service.backup_database(backup)
+        with self.store.db:
+            self.store.db.execute(
+                "DELETE FROM transactions WHERE fingerprint='synthetic-backup'"
+            )
+        self.assertEqual(
+            self.store.db.execute(
+                "SELECT COUNT(*) FROM transactions WHERE fingerprint='synthetic-backup'"
+            ).fetchone()[0],
+            0,
+        )
+        safety_copy = self.service.restore_database(backup)
+        self.assertTrue(Path(safety_copy).is_file())
+        self.assertEqual(
+            self.store.db.execute(
+                "SELECT COUNT(*) FROM transactions WHERE fingerprint='synthetic-backup'"
+            ).fetchone()[0],
+            1,
+        )
+
     def test_confirmed_movement_association_reused_on_import(self):
         category_id = self.service.create_category("Alimentari test", "uscita")
         supplier_id = self.service.create_supplier("ACME MARKET", (), category_id)

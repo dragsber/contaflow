@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+.venv-build/
 .env
 .env.*
 !.env.example
@@ -22,7 +23,10 @@ backup/
 *.bak
 *.backup
 *.log
+*.log.*
 logs/
+dist/
+build/
 *.pem
 *.key
 token*

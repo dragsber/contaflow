@@ -5,10 +5,17 @@ from db.migrations import migrate
 
 DEFAULT_ACCOUNTS = [('Revolut EUR','EUR','REVOLUT'),('Revolut CHF','CHF','REVOLUT'),('BPER EUR','EUR','BPER'),('Cassa contanti','EUR','CASH')]
 
-def data_path():
-    root = Path(os.environ.get('LOCALAPPDATA', Path.home())) / 'ContaFlow'
+def data_directory():
+    configured = os.environ.get('CONTAFLOW_DATA_DIR')
+    root = Path(configured).expanduser() if configured else (
+        Path(os.environ.get('LOCALAPPDATA', Path.home())) / 'ContaFlow'
+    )
     root.mkdir(parents=True, exist_ok=True)
-    return root / 'contaflow.sqlite3'
+    return root
+
+
+def data_path():
+    return data_directory() / 'contaflow.sqlite3'
 
 class Store:
     def __init__(self, path=None):

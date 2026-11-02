@@ -1,11 +1,11 @@
-# ContaFlow
+undefined
+## Build Windows portable
 
-Local-first Windows personal finance prototype using Python, Tkinter and SQLite.
+La build onedir viene prodotta con `build_windows.bat` nell'ambiente Windows autorizzato.
+Il pacchetto non include database o credenziali. Il database resta nella cartella utente
+`%LOCALAPPDATA%\ContaFlow`; per un percorso alternativo imposta `CONTAFLOW_DATA_DIR`.
+Per i dettagli e il backup/ripristino consulta [BUILD_WINDOWS.md](BUILD_WINDOWS.md).
 
-## Run
+## Build Windows portable
 
-Install Python 3.10+ with Tk support, then run `python -m contaflow`. Data is stored under `%LOCALAPPDATA%\ContaFlow\contaflow.sqlite3`.
-
-CSV import supports the Revolut export columns `Tipo, Prodotto, Data di inizio, Data di completamento, Descrizione, Importo, Costo, Valuta, State, Saldo`. Only completed rows are imported. Fees are represented separately; canceled rows are skipped. No bank files are included.
-
-Google Sheets, local AI and Enable Banking are future adapters; no credentials or external connections are needed for the core app.
+La build onedir viene prodotta con build_windows.bat in un ambiente Windows autorizzato. Il pacchetto non include database o credenziali. Il database resta nella cartella utente %LOCALAPPDATA%\ContaFlow; per un percorso alternativo imposta CONTAFLOW_DATA_DIR. Per dettagli e backup/ripristino consulta BUILD_WINDOWS.md.

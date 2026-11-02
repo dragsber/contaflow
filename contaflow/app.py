@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 
 from services.finance import FinanceService
+from contaflow.runtime import log_exception, show_error
 from adapters.google_sheets import GoogleSheetsAdapter
 from adapters.enable_banking import EnableBankingAdapter
 from adapters.local_ai import LocalAIAdapter
@@ -21,6 +22,7 @@ class App(tk.Tk):
         self.supplier_var = tk.StringVar()
         self.category_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Pronto")
+        self._build_menu()
         self._build_header()
         self.tabs = ttk.Notebook(self)
         self.tabs.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -49,6 +51,58 @@ class App(tk.Tk):
         self.account_box.configure(values=names)
         self.account_var.set(names[0] if names else "")
         self.refresh_all()
+
+    def _build_menu(self):
+        menu = tk.Menu(self)
+        database_menu = tk.Menu(menu, tearoff=False)
+        database_menu.add_command(label="Crea backup database", command=self.backup_database)
+        database_menu.add_command(label="Ripristina backup...", command=self.restore_database)
+        menu.add_cascade(label="Database", menu=database_menu)
+        self.configure(menu=menu)
+
+    def report_callback_exception(self, exc_type, exc_value, exc_traceback):
+        log_exception(exc_value, "Errore non gestito nella GUI", exc_traceback)
+        messagebox.showerror(
+            "Errore di ContaFlow",
+            "L'operazione non è riuscita. Il dettaglio tecnico è stato salvato nel log locale.",
+            parent=self,
+        )
+
+    def backup_database(self):
+        try:
+            path = self.store.backup_database()
+            self.status_var.set("Backup creato")
+            messagebox.showinfo("Backup completato", f"Copia salvata in:\n{path}", parent=self)
+        except Exception as error:
+            show_error(self, "Backup non completato",
+                       "Non è stato possibile creare il backup.", error, "Creazione backup")
+
+    def restore_database(self):
+        path = filedialog.askopenfilename(
+            title="Seleziona backup ContaFlow",
+            filetypes=[("Database SQLite", "*.sqlite3 *.sqlite *.db"), ("Tutti i file", "*.*")],
+        )
+        if not path:
+            return
+        if not messagebox.askyesno(
+            "Conferma ripristino",
+            "Il ripristino sostituirà i dati attualmente caricati. "
+            "Prima verrà creato un backup automatico.",
+            parent=self,
+        ):
+            return
+        try:
+            safety_copy = self.store.restore_database(path)
+            self.refresh_all()
+            self.status_var.set("Database ripristinato")
+            messagebox.showinfo(
+                "Ripristino completato",
+                f"Database ripristinato. Copia di sicurezza del precedente:\n{safety_copy}",
+                parent=self,
+            )
+        except Exception as error:
+            show_error(self, "Ripristino non completato",
+                       "Il backup non è stato ripristinato.", error, "Ripristino database")
 
     def _build_header(self):
         header = ttk.Frame(self, padding=(12, 10))
@@ -316,7 +370,7 @@ class App(tk.Tk):
                 win.destroy()
                 self.refresh_all()
             except Exception as error:
-                messagebox.showerror("Fornitore non salvato", str(error), parent=win)
+                show_error(win, "Fornitore non salvato", "Controlla i dati inseriti.", error, "Salvataggio fornitore")
         ttk.Button(form, text="Salva", command=save).grid(
             row=3, column=1, sticky="e", pady=(10, 0)
         )
@@ -334,7 +388,7 @@ class App(tk.Tk):
             self.store.add_supplier_alias(supplier_id, alias)
             self.refresh_suppliers()
         except Exception as error:
-            messagebox.showerror("Alias non salvato", str(error), parent=self)
+            show_error(self, 'Alias non salvato', 'Impossibile aggiungere l\'alias.', error, 'Salvataggio alias')
 
     def remove_alias(self):
         supplier_id = self._selected_id(self.suppliers_table, "un fornitore")
@@ -355,7 +409,7 @@ class App(tk.Tk):
             self.store.remove_supplier_alias(int(picked.strip().split("·")[0]))
             self.refresh_suppliers()
         except Exception as error:
-            messagebox.showerror("Alias non rimosso", str(error), parent=self)
+            show_error(self, 'Alias non rimosso', 'Impossibile rimuovere l\'alias.', error, 'Rimozione alias')
 
     def edit_category(self, new=False):
         category_id = None if new else self._selected_id(self.categories_table, "una categoria")
@@ -390,7 +444,7 @@ class App(tk.Tk):
                 win.destroy()
                 self.refresh_all()
             except Exception as error:
-                messagebox.showerror("Categoria non salvata", str(error), parent=win)
+                show_error(win, "Categoria non salvata", "Controlla i dati inseriti.", error, "Salvataggio categoria")
         ttk.Button(form, text="Salva", command=save).grid(
             row=2, column=1, sticky="e", pady=(10, 0)
         )
@@ -452,7 +506,7 @@ class App(tk.Tk):
                 win.destroy()
                 self.refresh_all()
             except Exception as error:
-                messagebox.showerror("Classificazione non salvata", str(error), parent=win)
+                show_error(win, "Classificazione non salvata", "Impossibile aggiornare la classificazione.", error, "Classificazione movimento")
         ttk.Button(form, text="Salva classificazione", command=save).grid(
             row=4, column=1, sticky="e", pady=(10, 0)
         )
@@ -512,8 +566,20 @@ class App(tk.Tk):
             self.status_var.set(f"Importazione completata · {result['imported']} movimenti importati")
         except Exception as error:
             self.status_var.set("Importazione non completata")
-            messagebox.showerror("Importazione non completata", str(error), parent=self)
+            show_error(self, "Importazione non completata", "Il CSV non è stato importato.", error, "Import CSV Revolut")
 
 
 def main():
-    App().mainloop()
+    try:
+        App().mainloop()
+    except Exception as error:
+        log_path = log_exception(error, "Avvio applicazione")
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror(
+            "ContaFlow non avviato",
+            "L'applicazione non è riuscita ad avviarsi. "
+            f"Il dettaglio è nel log locale:\n{log_path}",
+            parent=root,
+        )
+        root.destroy()

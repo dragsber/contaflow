@@ -1,4 +1,10 @@
+import sqlite3
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
 from contaflow.store import Store
+from db.migrations import migrate
 
 
 class FinanceService:
@@ -157,3 +163,57 @@ class FinanceService:
         return self.classify_movement(
             movement_id, supplier_id, category_id, remember_alias=True
         )
+
+    def backup_database(self, destination=None):
+        if destination is None:
+            backup_dir = Path(self.store.path).parent / "backups"
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            destination = backup_dir / f"ContaFlow_backup_{stamp}.sqlite3"
+        target = Path(destination).expanduser().resolve()
+        source = Path(self.store.path).resolve()
+        if target == source:
+            raise ValueError("Il file di backup non può coincidere con il database attivo")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        backup = sqlite3.connect(str(target))
+        try:
+            self.store.db.backup(backup)
+        finally:
+            backup.close()
+        return str(target)
+
+    def restore_database(self, source_path):
+        source = Path(source_path).expanduser().resolve()
+        if not source.is_file():
+            raise ValueError("Il file di backup selezionato non esiste")
+        if source == Path(self.store.path).resolve():
+            raise ValueError("Seleziona un backup diverso dal database attivo")
+        self.store.db.commit()
+        with tempfile.TemporaryDirectory(prefix="contaflow-restore-") as temp_dir:
+            staged_path = Path(temp_dir) / "validated.sqlite3"
+            with sqlite3.connect(str(source)) as original:
+                integrity = original.execute("PRAGMA integrity_check").fetchone()[0]
+                if integrity != "ok":
+                    raise ValueError("Il backup selezionato non supera il controllo di integrità")
+                table_names = {
+                    row[0] for row in original.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                }
+                if not {"accounts", "categories", "transactions"}.issubset(table_names):
+                    raise ValueError("Il file selezionato non è un database ContaFlow")
+                staged = sqlite3.connect(str(staged_path))
+                try:
+                    original.backup(staged)
+                    migrate(staged)
+                    if staged.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                        raise ValueError("Il backup non è integro dopo la migrazione")
+                    if staged.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0:
+                        raise ValueError("Il backup non contiene conti")
+                    staged.commit()
+                finally:
+                    staged.close()
+            safety_copy = self.backup_database()
+            with sqlite3.connect(str(staged_path)) as validated:
+                validated.backup(self.store.db)
+            self.store.db.execute("PRAGMA foreign_keys=ON")
+            return safety_copy
