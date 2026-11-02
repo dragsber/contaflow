@@ -35,6 +35,27 @@ class AlphaServiceTests(unittest.TestCase):
         self.service.archive_category(renamed_category_id)
         self.assertNotIn(renamed_category_id, [row["id"] for row in self.service.categories()])
 
+    def test_summary_uses_confirmed_opening_balance(self):
+        account_id = self.store.db.execute(
+            "SELECT id FROM accounts WHERE name='Revolut EUR'"
+        ).fetchone()["id"]
+        with self.store.db:
+            self.store.db.execute(
+                "INSERT INTO opening_balances(account_id,as_of,amount,confirmed) "
+                "VALUES(?,?,?,1)",
+                (account_id, "2025-12-31", 100.0),
+            )
+            self.store.db.execute(
+                "INSERT INTO transactions(fingerprint,account_id,occurred_at,description,"
+                "amount,currency,fee,kind,status,source_json) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                ("synthetic-opening", account_id, "2026-01-01", "OPENING TEST",
+                 -10.0, "EUR", 1.0, "CARD_PAYMENT", "COMPLETATO", "{}"),
+            )
+        summary = self.service.summary("Revolut EUR")[0]
+        self.assertTrue(summary["opening_balance_confirmed"])
+        self.assertEqual(summary["bank_balance"], 89.0)
+
     def test_backup_and_restore_preserves_synthetic_database(self):
         account_id = self.store.db.execute(
             "SELECT id FROM accounts WHERE name='Revolut EUR'"

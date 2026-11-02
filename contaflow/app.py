@@ -265,10 +265,17 @@ class App(tk.Tk):
             return
         row = rows[0]
         currency = row["currency"]
-        self.account_heading.config(
-            text=f"{row['name']} · {currency} · Saldo dei movimenti importati: "
-                 f"{row['balance']:.2f} {currency} · Saldo iniziale non confermato"
-        )
+        if row["opening_balance_confirmed"]:
+            balance_label = (
+                f"Saldo bancario effettivo: {row['bank_balance']:.2f} {currency} "
+                f"(saldo iniziale al {row['opening_as_of']})"
+            )
+        else:
+            balance_label = (
+                f"Saldo dei movimenti importati: {row['balance']:.2f} {currency} · "
+                "Saldo iniziale non confermato"
+            )
+        self.account_heading.config(text=f"{row['name']} · {currency} · {balance_label}")
         ttk.Label(
             self.cards,
             text=f"Entrate {row['income']:.2f} {currency}     "
