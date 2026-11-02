@@ -2,7 +2,10 @@ import csv
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from .store import Store
+from services.finance import FinanceService
+from adapters.google_sheets import GoogleSheetsAdapter
+from adapters.enable_banking import EnableBankingAdapter
+from adapters.local_ai import LocalAIAdapter
 
 
 class App(tk.Tk):
@@ -10,7 +13,8 @@ class App(tk.Tk):
         super().__init__()
         self.title('ContaFlow')
         self.geometry('1080x700')
-        self.store = Store()
+        self.store = FinanceService()
+        self.adapters = (GoogleSheetsAdapter(), EnableBankingAdapter(), LocalAIAdapter())
 
         bar = ttk.Frame(self, padding=10)
         bar.pack(fill='x')
@@ -84,7 +88,7 @@ class App(tk.Tk):
                      f"Uscite {row['expenses']:.2f} {row['currency']}",
                 padding=10, relief='groove').pack(side='left')
         self.table.delete(*self.table.get_children())
-        for row in self.store.recent(account):
+        for row in self.store.movements(account):
             self.table.insert(
                 '', 'end',
                 values=(row['occurred_at'], row['description'],
@@ -113,8 +117,8 @@ class App(tk.Tk):
             if self.account_var.get() not in names:
                 self.account_var.set(names[0])
             self.account_box.configure(values=names)
-            result = self.store.import_revolut_detailed(path, self.account_var.get())
-            anomalies = self.store.reconcile_revolut_csv(path)
+            result = self.store.import_revolut(path, self.account_var.get())
+            anomalies = result.pop('anomalies')
             self.anomalies.delete(*self.anomalies.get_children())
             for anomaly in anomalies:
                 self.anomalies.insert(
