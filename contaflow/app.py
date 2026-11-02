@@ -68,9 +68,8 @@ class App(tk.Tk):
     def refresh(self):
         account = self.account_var.get()
         rows = self.store.summary(account)
-        self.cards.destroy()
-        self.cards = ttk.Frame(self, padding=10)
-        self.cards.pack(fill='x', before=self.table.master.winfo_children()[1])
+        for child in self.cards.winfo_children():
+            child.destroy()
         if rows:
             row = rows[0]
             self.account_heading.config(
