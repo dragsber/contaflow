@@ -1,0 +1,1 @@
+"""ContaFlow local finance prototype."""
