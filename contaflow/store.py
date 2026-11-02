@@ -1,6 +1,7 @@
 import csv, os, sqlite3, hashlib, json
 from pathlib import Path
 from datetime import datetime
+from db.migrations import migrate
 
 DEFAULT_ACCOUNTS = [('Revolut EUR','EUR','REVOLUT'),('Revolut CHF','CHF','REVOLUT'),('BPER EUR','EUR','BPER'),('Cassa contanti','EUR','CASH')]
 
@@ -29,6 +30,7 @@ class Store:
             self.db.execute('INSERT OR IGNORE INTO accounts(name,currency,provider) VALUES(?,?,?)', (name,currency,provider))
             self.db.execute('UPDATE accounts SET provider=? WHERE name=? AND provider=\'UNKNOWN\'', (provider,name))
         self.db.commit()
+        migrate(self.db)
     def accounts(self):
         return self.db.execute('SELECT name,currency,provider FROM accounts ORDER BY id').fetchall()
     def import_revolut(self, file, account='Revolut EUR'):
