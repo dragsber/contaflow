@@ -31,6 +31,42 @@ class Store:
             self.db.execute('UPDATE accounts SET provider=? WHERE name=? AND provider=\'UNKNOWN\'', (provider,name))
         self.db.commit()
         migrate(self.db)
+    @staticmethod
+    def normalize_description(value):
+        import re
+        text=' '.join(value.upper().split())
+        text=re.sub(r'^(CARD PAYMENT|PAGAMENTO CARTA|PAGAMENTO CON CARTA)\\s+', '', text)
+        text=re.sub(r'\\b(?:REF|REFERENCE|ID|CARD)[:#]?\\s*[A-Z0-9-]+\\b', ' ', text)
+        return ' '.join(text.split())
+
+    def classify_description(self, description):
+        key=self.normalize_description(description)
+        aliases=self.db.execute(
+            'SELECT sa.supplier_id,sa.confirmed,s.name,s.habitual_category_id '
+            'FROM supplier_aliases sa JOIN suppliers s ON s.id=sa.supplier_id '
+            'WHERE sa.normalized_alias=? AND s.archived=0',(key,)).fetchone()
+        if aliases and aliases['confirmed']:
+            status='classificato' if aliases['habitual_category_id'] else 'proposto'
+            return {'supplier_id':aliases['supplier_id'],'category_id':aliases['habitual_category_id'],'status':status,'origin':'confermata'}
+        if aliases:
+            status='classificato' if aliases['habitual_category_id'] else 'proposto'
+            return {'supplier_id':aliases['supplier_id'],'category_id':aliases['habitual_category_id'],'status':status,'origin':'alias' if status=='classificato' else 'proposta'}
+        for rule in self.db.execute('SELECT * FROM classification_rules WHERE enabled=1'):
+            if self.normalize_description(rule['exact_description'])==key:
+                return {'supplier_id':rule['supplier_id'],'category_id':rule['category_id'],'status':'classificato','origin':'regola'}
+        supplier=self.db.execute('SELECT id,habitual_category_id FROM suppliers WHERE UPPER(name)=? AND archived=0',(key,)).fetchone()
+        if supplier:
+            return {'supplier_id':supplier['id'],'category_id':supplier['habitual_category_id'],'status':'proposto','origin':'proposta'}
+        return {'supplier_id':None,'category_id':None,'status':'in_attesa','origin':None}
+
+    def confirm_supplier_alias(self, supplier_id, description, category_id=None):
+        key=self.normalize_description(description)
+        with self.db:
+            self.db.execute('INSERT INTO supplier_aliases(normalized_alias,supplier_id,confirmed) VALUES(?,?,1) ON CONFLICT(normalized_alias) DO UPDATE SET supplier_id=excluded.supplier_id,confirmed=1',(key,supplier_id))
+            if category_id is not None:
+                self.db.execute('UPDATE suppliers SET habitual_category_id=? WHERE id=?',(category_id,supplier_id))
+            self.db.execute('UPDATE transactions SET supplier_id=?,category_id=COALESCE(?,category_id),classification_status=CASE WHEN ? IS NULL THEN classification_status ELSE \'classificato\' END,classification_origin=\'confermata\' WHERE description=?',(supplier_id,category_id,category_id,description))
+
     def accounts(self):
         return self.db.execute('SELECT name,currency,provider FROM accounts ORDER BY id').fetchall()
     def import_revolut(self, file, account='Revolut EUR'):
@@ -60,7 +96,7 @@ class Store:
                     cur=self.db.execute('INSERT OR IGNORE INTO transactions(fingerprint,account_id,occurred_at,description,amount,currency,fee,kind,status,source_json) VALUES(?,?,?,?,?,?,?,?,?,?)',(fp,aid,when,r['Descrizione'],amount,currency,fee,r['Tipo'],'COMPLETATO',raw))
                     if cur.rowcount: count+=1
                     else: duplicates+=1
-        return {'imported':count,'duplicates':duplicates,'excluded':excluded}
+        return {'imported':count,'duplicates':duplicates,'excluded':excluded,'classified':0,'proposed':0,'pending':0}
     def summary(self, account=None):
         sql='SELECT a.name,a.currency,COALESCE(SUM(t.amount-t.fee),0) balance,COALESCE(SUM(CASE WHEN t.amount>0 THEN t.amount ELSE 0 END),0) income,COALESCE(SUM(CASE WHEN t.amount<0 THEN t.amount ELSE 0 END),0) expenses FROM accounts a LEFT JOIN transactions t ON t.account_id=a.id AND t.status="COMPLETATO"'
         if account: return self.db.execute(sql+' WHERE a.name=? GROUP BY a.id',(account,)).fetchall()
