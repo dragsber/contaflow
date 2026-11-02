@@ -67,6 +67,7 @@ class App(tk.Tk):
 
     def refresh(self):
         account = self.account_var.get()
+        self.account_box.configure(values=[row['name'] for row in self.store.accounts()])
         rows = self.store.summary(account)
         for child in self.cards.winfo_children():
             child.destroy()
