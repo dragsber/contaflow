@@ -50,3 +50,36 @@ class Store:
     def summary(self):
         return self.db.execute('SELECT a.name,a.currency,COALESCE(SUM(t.amount-t.fee),0) balance,COALESCE(SUM(CASE WHEN t.amount>0 THEN t.amount ELSE 0 END),0) income,COALESCE(SUM(CASE WHEN t.amount<0 THEN t.amount ELSE 0 END),0) expenses FROM accounts a LEFT JOIN transactions t ON t.account_id=a.id AND t.status="COMPLETATO" GROUP BY a.id ORDER BY a.id').fetchall()
     def recent(self): return self.db.execute('SELECT occurred_at,description,amount,currency,fee,kind FROM transactions ORDER BY id DESC LIMIT 100').fetchall()
+
+    def reconcile_revolut_csv(self, file):
+        """Return CSV row numbers whose reported balance does not reconcile."""
+        from decimal import Decimal, InvalidOperation
+
+        with open(file, encoding='utf-8-sig', newline='') as handle:
+            reader = csv.DictReader(handle)
+            required = {'Data di completamento', 'Importo', 'Costo', 'Valuta', 'State', 'Saldo'}
+            if not reader.fieldnames or not required.issubset(reader.fieldnames):
+                raise ValueError('Schema CSV Revolut incompleto per la riconciliazione')
+            completed = []
+            for row_number, row in enumerate(reader, start=2):
+                if row['State'].strip().upper() != 'COMPLETATO':
+                    continue
+                if not row['Data di completamento'] or not row['Saldo']:
+                    raise ValueError(f'Data o saldo mancante alla riga {row_number}')
+                try:
+                    amount = Decimal(row['Importo'])
+                    fee = Decimal(row['Costo'] or '0')
+                    balance = Decimal(row['Saldo'])
+                except InvalidOperation as error:
+                    raise ValueError(f'Numero non valido alla riga {row_number}') from error
+                completed.append((row['Data di completamento'], row_number,
+                                  row['Valuta'].strip().upper(), amount - fee, balance))
+
+        previous_by_currency = {}
+        anomalies = []
+        for _, row_number, currency, movement, balance in sorted(completed):
+            previous = previous_by_currency.get(currency)
+            if previous is not None and balance - previous != movement:
+                anomalies.append(row_number)
+            previous_by_currency[currency] = balance
+        return anomalies
