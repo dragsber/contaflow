@@ -153,9 +153,19 @@ class Store:
         if account: return self.db.execute(sql+' WHERE a.name=? GROUP BY a.id',(account,)).fetchall()
         return self.db.execute(sql+' GROUP BY a.id ORDER BY a.id').fetchall()
     def recent(self, account=None):
-        sql='SELECT occurred_at,description,amount,currency,fee,kind FROM transactions'
-        if account: return self.db.execute(sql+' WHERE account_id=(SELECT id FROM accounts WHERE name=?) ORDER BY id DESC LIMIT 100',(account,)).fetchall()
-        return self.db.execute(sql+' ORDER BY id DESC LIMIT 100').fetchall()
+        sql = (
+            "SELECT t.id,t.occurred_at,t.description,t.amount,t.currency,t.fee,t.kind,"
+            "t.classification_status,t.classification_origin,t.supplier_id,t.category_id,"
+            "s.name AS supplier,c.name AS category "
+            "FROM transactions t LEFT JOIN suppliers s ON s.id=t.supplier_id "
+            "LEFT JOIN categories c ON c.id=t.category_id"
+        )
+        if account:
+            return self.db.execute(
+                sql + " WHERE t.account_id=(SELECT id FROM accounts WHERE name=?) "
+                "ORDER BY t.id DESC LIMIT 100", (account,)
+            ).fetchall()
+        return self.db.execute(sql + " ORDER BY t.id DESC LIMIT 100").fetchall()
 
     def reconcile_revolut_csv(self, file):
         """Return reconciliation anomalies with source row numbers."""
