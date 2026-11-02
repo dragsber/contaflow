@@ -1,6 +1,6 @@
 import sqlite3
 
-LATEST_SCHEMA_VERSION = 2
+LATEST_SCHEMA_VERSION = 3
 
 
 def _columns(connection, table):
@@ -96,6 +96,11 @@ def _migration_2(connection):
     """)
 
 
+def _migration_3(connection):
+    _add_column(connection, 'supplier_aliases',
+                "confirmed INTEGER NOT NULL DEFAULT 0 CHECK (confirmed IN (0,1))")
+
+
 def migrate(connection: sqlite3.Connection) -> None:
     connection.execute('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)')
     row = connection.execute('SELECT version FROM schema_version LIMIT 1').fetchone()
@@ -106,4 +111,7 @@ def migrate(connection: sqlite3.Connection) -> None:
     if version < 2:
         _migration_2(connection)
         connection.execute('UPDATE schema_version SET version=2')
+    if version < 3:
+        _migration_3(connection)
+        connection.execute('UPDATE schema_version SET version=3')
     connection.commit()
