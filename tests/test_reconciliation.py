@@ -28,7 +28,8 @@ class ReconciliationTest(unittest.TestCase):
                 writer.writerow(fields)
                 writer.writerows(rows)
             try:
-                self.assertEqual(store.reconcile_revolut_csv(statement), [5])
+                self.assertEqual(store.reconcile_revolut_csv(statement), [
+                    {'row': 5, 'currency': 'EUR', 'expected_delta': '-3.00', 'actual_delta': '-2.00'}])
             finally:
                 store.db.close()
 
