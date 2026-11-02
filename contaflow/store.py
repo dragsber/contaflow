@@ -35,8 +35,8 @@ class Store:
     def normalize_description(value):
         import re
         text=' '.join(value.upper().split())
-        text=re.sub(r'^(CARD PAYMENT|PAGAMENTO CARTA|PAGAMENTO CON CARTA)\\s+', '', text)
-        text=re.sub(r'\\b(?:REF|REFERENCE|ID|CARD)[:#]?\\s*[A-Z0-9-]+\\b', ' ', text)
+        text=re.sub(r'^(CARD PAYMENT|PAGAMENTO CARTA|PAGAMENTO CON CARTA)\s+', '', text)
+        text=re.sub(r'\b(?:REF|REFERENCE|ID|CARD)[:#]?\s*[A-Z0-9-]+\b', ' ', text)
         return ' '.join(text.split())
 
     def classify_description(self, description):
@@ -73,8 +73,8 @@ class Store:
     def normalize_description(value):
         import re
         text=' '.join(value.upper().split())
-        text=re.sub(r'^(CARD PAYMENT|PAGAMENTO CARTA|PAGAMENTO CON CARTA)\\s+', '', text)
-        text=re.sub(r'\\b(?:REF|REFERENCE|ID|CARD)[:#]?\\s*[A-Z0-9-]+\\b', ' ', text)
+        text=re.sub(r'^(CARD PAYMENT|PAGAMENTO CARTA|PAGAMENTO CON CARTA)\s+', '', text)
+        text=re.sub(r'\b(?:REF|REFERENCE|ID|CARD)[:#]?\s*[A-Z0-9-]+\b', ' ', text)
         return ' '.join(text.split())
 
     def classify_description(self, description):
