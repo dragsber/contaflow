@@ -133,6 +133,9 @@ class App(tk.Tk):
                 f"Importati: {result['imported']}\n"
                 f"Duplicati saltati: {result['duplicates']}\n"
                 f"Escluse (non completate): {result['excluded']}\n"
+                f"Classificati automaticamente: {result['classified']}\n"
+                f"Proposte da confermare: {result['proposed']}\n"
+                f"In attesa: {result['pending']}\n"
                 f"Anomalie di riconciliazione: {len(anomalies)}\n"
                 "Errori: 0")
         except Exception as error:
