@@ -1,8 +1,8 @@
 # Stato sviluppo ContaFlow · Alpha 0.1
 
-- Ultimo commit funzionale pubblicato: 530cbc1d2b783821d21b6b73202cc932bc241fd8.
-- Incremento UI fornitori/classificazione: db4e96ee29405211f8498f48c627f5818a890c40.
-- Branch remoto: codex/contaflow-sviluppo; ultimo ref verificato durante la sessione: 530cbc1d2b783821d21b6b73202cc932bc241fd8.
+- Ultimo commit funzionale pubblicato: f2aa6b3413e632a89dd5fd37f2683817adb5523b.
+- Incremento UI fornitori/classificazione: db4e96ee29405211f8498f48c627f5818a890c40; portable: 530cbc1d2b783821d21b6b73202cc932bc241fd8.
+- Branch remoto codex/contaflow-sviluppo verificato fino al commit f2aa6b3413e632a89dd5fd37f2683817adb5523b.
 - Fase attiva: Alpha Windows 0.1.
 - Architettura: Python, Tkinter/ttk, SQLite; GUI usa FinanceService; database sotto la cartella utente/configurabile; migrazioni versionate schema 3.
 - Implementato: schermate Dashboard, Movimenti, Importazione, Fornitori e Categorie; filtro conto; gestione fornitori/alias/categorie; revisione e riuso delle associazioni confermate.
