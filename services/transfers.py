@@ -88,13 +88,14 @@ def account_summary(store, account=None):
             continue
         balance = income = expenses = fees = Decimal(0)
         for row in store.db.execute(
-            "SELECT amount,fee,classification_status,accounting_nature FROM transactions "
-            "WHERE account_id=? AND status='COMPLETATO'", (account_row["id"],)
+            "SELECT t.amount,t.fee,t.classification_status,t.accounting_nature,c.category_type "
+            "FROM transactions t LEFT JOIN categories c ON c.id=t.category_id "
+            "WHERE t.account_id=? AND t.status='COMPLETATO'", (account_row["id"],)
         ):
             amount, fee = Decimal(str(row["amount"])), Decimal(str(row["fee"]))
             balance += amount - fee
             fees += fee
-            if row["classification_status"] in ("trasferimento", "escluso") or row["accounting_nature"] in (
+            if row["category_type"] == "trasferimento" or row["classification_status"] in ("trasferimento", "escluso") or row["accounting_nature"] in (
                 "trasferimento", "prelievo", "giroconto", "escluso",
             ):
                 continue

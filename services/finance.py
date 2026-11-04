@@ -65,6 +65,14 @@ class FinanceService:
             enriched.append(item)
         return enriched
 
+    def save_budget(self, year, month, category_id, currency, amount):
+        from services.budget import save_budget
+        return save_budget(self.store.db, year, month, category_id, currency, amount)
+
+    def budget_report(self, year, month):
+        from services.budget import budget_report
+        return budget_report(self.store.db, year, month)
+
     def unlink_movement(self, movement_id):
         from services.transfers import unlink_movement
         return unlink_movement(self.store.db, movement_id)

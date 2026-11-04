@@ -178,8 +178,17 @@ class MovementRegister(ttk.Frame):
         text = "Seleziona un movimento per visualizzare i dettagli."
         if len(selected) == 1:
             row = self.rows[selected[0]]
-            text = "\n".join(f"{key}: {value}" for key, value in row.items()
-                             if key != "source_json")
+            details = (
+                ("Identificativo", row["id"]), ("Conto", row["account"]),
+                ("Data e ora", row["occurred_at"]), ("Descrizione", row["description"]),
+                ("Importo", money(row["amount"],row["currency"])),
+                ("Commissione", money(row["fee"],row["currency"])),
+                ("Stato", STATUSES.get(row["classification_status"],row["classification_status"])),
+                ("Fornitore", row["supplier"] or ""), ("Categoria", row["category"] or ""),
+                ("Note", row.get("notes", "")), ("Natura contabile", row.get("accounting_nature", "")),
+                ("Lotto", row["importation_id"]),
+            )
+            text = "\n".join(f"{label}: {value}" for label, value in details)
             text += "\nDati bancari originali\n" + json.dumps(
                 json.loads(row["source_json"]), ensure_ascii=False, indent=2)
         elif selected:

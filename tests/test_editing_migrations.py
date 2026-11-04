@@ -98,7 +98,13 @@ class EditingMigrationTests(unittest.TestCase):
         app = App(service)
         app.withdraw()
         self.addCleanup(app.destroy)
-        app.table.selection_set("1")
+        with service.store.db:
+            second = service.store.db.execute(
+                "INSERT INTO transactions(account_id,occurred_at,description,amount,currency,kind,status,source_json) "
+                "VALUES(1,'2026-01-01','Secondo',-2,'EUR','CARD','COMPLETATO','{}')"
+            ).lastrowid
+        app.refresh_all()
+        app.table.selection_set("1", str(second))
         app.edit_movement_classification()
         window = next(w for w in app.winfo_children() if w.winfo_class() == "Toplevel")
         form = window.winfo_children()[0]
@@ -109,6 +115,23 @@ class EditingMigrationTests(unittest.TestCase):
                     if isinstance(w, ttk.Button) and w.cget("text") == "Salva")
         with patch("contaflow.movement_editor.messagebox.askyesno", return_value=True) as confirm:
             save.invoke()
-        self.assertIn("1 movimenti", confirm.call_args.args[1])
+        self.assertIn("2 movimenti", confirm.call_args.args[1])
         self.assertEqual(service.movements()[0]["category"], "Categoria GUI")
         self.assertTrue(service.movement_audit(1))
+
+    def test_future_rule_does_not_reclassify_unselected_history(self):
+        service = FinanceService(Store(self.path))
+        with closing(service.store.db):
+            supplier = service.create_supplier("TEST")
+            category = service.create_category("Categoria")
+            with service.store.db:
+                other = service.store.db.execute(
+                    "INSERT INTO transactions(account_id,occurred_at,description,amount,currency,kind,status,source_json) "
+                    "VALUES(1,'2026-01-01','TEST',-2,'EUR','CARD','COMPLETATO','{}')"
+                ).lastrowid
+            service.update_movements([1], {"supplier_id":supplier,"category_id":category,
+                                          "classification_status":"classificato"},remember=True)
+            row = service.store.db.execute("SELECT * FROM transactions WHERE id=?", (other,)).fetchone()
+            self.assertIsNone(row["category_id"])
+            self.assertEqual(row["classification_status"], "in_attesa")
+            self.assertEqual(service.store.classify_description("TEST")["category_id"], category)

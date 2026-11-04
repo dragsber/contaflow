@@ -85,3 +85,11 @@ class ImportWorkflowTests(unittest.TestCase):
             with patch("contaflow.app.messagebox.askyesno", return_value=True):
                 app.import_csv()
         self.assertEqual(len(self.service.movements()), 2)
+
+    def test_non_finite_or_out_of_range_amounts_are_rejected(self):
+        original = self.path.read_bytes()
+        for invalid in (b"NaN", b"Infinity", b"1e999"):
+            self.path.write_bytes(original.replace(b",-10,", b"," + invalid + b","))
+            with self.assertRaises(ValueError):
+                self.service.preview_import(self.path, "Revolut EUR")
+            self.assertEqual(self.service.movements(), [])

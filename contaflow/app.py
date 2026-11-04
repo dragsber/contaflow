@@ -4,8 +4,10 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 
 from services.finance import FinanceService, RestoreVerificationError
+from db.migrations import MigrationError
 from contaflow.runtime import log_exception, show_error
 from contaflow.register import MovementRegister
+from contaflow.budget import BudgetPanel
 from adapters.google_sheets import GoogleSheetsAdapter
 from adapters.enable_banking import EnableBankingAdapter
 from adapters.local_ai import LocalAIAdapter
@@ -46,6 +48,8 @@ class App(tk.Tk):
         self._build_import()
         self._build_suppliers()
         self._build_categories()
+        self.budget = BudgetPanel(self.tabs, self.store)
+        self.tabs.add(self.budget, text='Budget')
         ttk.Label(self, textvariable=self.status_var, anchor="w", padding=(12, 4)).pack(fill="x")
         accounts = self.store.accounts()
         names = [row["name"] for row in accounts]
@@ -324,6 +328,7 @@ class App(tk.Tk):
         self._refresh_movements(account)
         self.refresh_suppliers()
         self.refresh_categories()
+        self.budget.refresh()
 
     def _refresh_dashboard(self, account):
         rows = self.store.summary(account)
@@ -599,7 +604,7 @@ class App(tk.Tk):
                     f"Collegamenti trasferimenti: {dependencies['transfers']}, rimborsi: {dependencies['refunds']}.\n")
             if extra:
                 text += ("CONFERMA SPECIFICA — saranno rimossi anche i collegamenti. "
-                         "Le altre gambe di trasferimento torneranno In attesa. "
+                         "Le altre gambe di trasferimento torneranno allo stato precedente. "
                          "I valori rimossi saranno conservati nell'audit.")
             if not messagebox.askyesno("Conferma annullamento lotto", text, parent=win):
                 return
@@ -623,7 +628,8 @@ def main():
         messagebox.showerror(
             "ContaFlow non avviato",
             "L'applicazione non è riuscita ad avviarsi. "
-            f"Il dettaglio è nel log locale:\n{log_path}",
+            + (f"\n{error}\n" if isinstance(error, MigrationError) else "")
+            + f"Il dettaglio è nel log locale:\n{log_path}",
             parent=root,
         )
         root.destroy()

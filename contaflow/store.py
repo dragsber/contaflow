@@ -165,6 +165,12 @@ class Store:
                     result["duplicates"] += 1
                     continue
                 classification = self.classify_description(row["Descrizione"])
+                if classification["category_id"] is not None:
+                    category_type = self.db.execute(
+                        "SELECT category_type FROM categories WHERE id=?", (classification["category_id"],)
+                    ).fetchone()
+                    if category_type and category_type[0] == "trasferimento":
+                        classification["status"] = "trasferimento"
                 self.db.execute(
                     "INSERT INTO transactions(id,fingerprint,account_id,occurred_at,description,"
                     "amount,currency,fee,kind,status,source_json,supplier_id,category_id,"
@@ -178,7 +184,7 @@ class Store:
                 )
                 next_id += 1
                 result["imported"] += 1
-                result[{"classificato":"classified", "proposto":"proposed", "in_attesa":"pending"}[classification["status"]]] += 1
+                result[{"classificato":"classified", "proposto":"proposed", "in_attesa":"pending", "trasferimento":"classified"}[classification["status"]]] += 1
             self.db.execute("UPDATE importations SET result='completed' WHERE id=?", (batch,))
         return {**result, "batch_id": batch}
 

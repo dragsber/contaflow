@@ -3,7 +3,7 @@ from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
-LATEST_SCHEMA_VERSION = 5
+LATEST_SCHEMA_VERSION = 6
 
 
 def _columns(connection, table):
@@ -173,13 +173,17 @@ def _migration_5(connection):
     )
 
 
+def _migration_6(connection):
+    _add_column(connection, "budgets", "amount_minor INTEGER")
+
+
 def migrate(connection: sqlite3.Connection, *, new_database=False) -> None:
     if connection.in_transaction:
         raise MigrationError("Completa la transazione prima di aggiornare il database")
     version = schema_version(connection)
     if version > LATEST_SCHEMA_VERSION:
         raise MigrationError("Database creato con una versione più recente di ContaFlow")
-    migrations = {1: lambda db: None, 2: _migration_2, 3: _migration_3, 4: _migration_4, 5: _migration_5}
+    migrations = {1: lambda db: None, 2: _migration_2, 3: _migration_3, 4: _migration_4, 5: _migration_5, 6: _migration_6}
     for target_version in range(version + 1, LATEST_SCHEMA_VERSION + 1):
         safety = None if new_database else backup_before_upgrade(connection)
         previous = schema_version(connection)

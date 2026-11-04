@@ -16,6 +16,7 @@ def update_movements(store, movement_ids, changes, remember=False):
         raise ValueError("Stato non valido")
     if "accounting_nature" in changes and changes["accounting_nature"] not in NATURES:
         raise ValueError("Natura contabile non valida")
+    changes = dict(changes)
     db = store.db
     if db.in_transaction:
         raise ValueError("Completa la transazione in corso")
@@ -27,6 +28,19 @@ def update_movements(store, movement_ids, changes, remember=False):
                 f"SELECT 1 FROM {table} WHERE id=? AND archived=0", (value,)
             ).fetchone() is None:
                 raise ValueError("Fornitore o categoria non disponibile")
+        category = db.execute(
+            "SELECT category_type FROM categories WHERE id=?", (changes.get("category_id"),)
+        ).fetchone()
+        if category and category[0] == "trasferimento":
+            changes["classification_status"] = "trasferimento"
+        if changes.get("classification_status") == "trasferimento" or changes.get("accounting_nature") in (
+            "trasferimento", "prelievo", "giroconto",
+        ):
+            changes["classification_status"] = "trasferimento"
+            if changes.get("accounting_nature") not in ("prelievo", "giroconto"):
+                changes["accounting_nature"] = "trasferimento"
+        if changes.get("classification_status") == "escluso" or changes.get("accounting_nature") == "escluso":
+            changes["classification_status"], changes["accounting_nature"] = "escluso", "escluso"
         for movement_id in ids:
             row = db.execute("SELECT * FROM transactions WHERE id=?", (movement_id,)).fetchone()
             if row is None:

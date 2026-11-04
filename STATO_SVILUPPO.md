@@ -1,101 +1,136 @@
 # ContaFlow · Alpha 0.2 — build intermedia
 
-Ultimo commit precedente all'incremento corrente: 7ad02f8f4cc04e1041de2fa4666ec2e96da52b1c.
-L'incremento corrente è identificato dal commit che contiene questo file.
-Branch codex/contaflow-sviluppo. Fase attiva E operativa per movimenti esistenti, prossimo incremento F.
+- Branch codex/contaflow-sviluppo.
+- Ultimo commit precedente al presente incremento: 331e12ba24f75fc2ef8c8e5f036483d19380e2e2.
+  Il commit che contiene questo documento identifica l'incremento corrente.
+- Fase attiva F operativa. Sprint A–F pubblicati in sequenza.
+- Schema 6, Python 3.12, Tkinter/ttk, SQLite. Calcoli nuovi Decimal.
+- Stato della consegna: sorgenti pronti alla compilazione e al collaudo manuale.
+  EXE Alpha 0.2 NON prodotto. Versione intermedia, requisiti secondari aperti sotto.
 
-## Funzioni e verifiche
+## Architettura implementata e funzionalità operative
 
-- Sprint E collegamento e scollegamento dal registro di movimenti già presenti,
-  trasferimento, giroconto, prelievo verso cassa, rimborso e storno.
-  Validazione segni, conti, importi, dipendenze e residuo rimborsabile. Audit dei collegamenti.
-  Nessun reinserimento delle due gambe. CHF/EUR originali conservati, tasso non inventato.
-- Dashboard con nuovi calcoli Decimal. Saldi includono le due gambe sui rispettivi conti.
-  Entrate/uscite escludono trasferimenti ed esclusi dal consuntivo. Commissioni separate.
-  Rimborsi/storni positivi riducono la spesa.
-- Sprint E verificato con 5 test Windows, inclusi GUI collegamento, valute,
-  saldo/commissioni, limite rimborsi, scollegamento e annullamento di lotto collegato.
-- Limite E documentato. Inserimento manuale di una nuova gamba cassa non disponibile.
-  Occorre che entrambe le gambe esistano. Rimborso in valuta diversa non automatizzato.
+A. Registro via FinanceService con query parametrizzate, tutti i movimenti senza limite
+di 100, conto/tutti i conti, testo, periodo, categoria, fornitore, stato e Da classificare.
+Ordinamento su tutte le colonne, scroll orizzontale/verticale, selezione multipla,
+dettagli e dati originali, legenda testuale/colori, importi italiani e commissioni separate.
 
+B. Modifica singola/multipla con conferma del numero di movimenti e dei campi.
+Fornitore, categoria, stato, note e natura contabile. Audit consultabile dal dialogo.
+Scelta esplicita tra movimento selezionato e regola futura. Nessuna riclassificazione
+dello storico non selezionato. Importi, dati sorgente e fingerprint non modificabili dal servizio.
 
-- Sprint D operativo GUI. Anteprima obbligatoria Revolut EUR/CHF e conferma esplicita,
-  snapshot immutabile del file, valuta/provider, anomalie, conteggi, deduplica storica
-  compatibile con fingerprint Alpha 0.1. Conservata la rappresentazione float SOLO per
-  l'identità dei fingerprint e per la persistenza REAL legacy. Nuove verifiche Decimal.
-- Lotti consultabili e annullabili dalla GUI. Controllo dipendenze sotto BEGIN IMMEDIATE,
-  conferma specifica per modifiche manuali/trasferimenti/rimborsi. Audit conserva snapshot
-  integrale dei movimenti eliminati e dei collegamenti. ID nuovi oltre il massimo dell'audit
-  per evitare riuso dell'identità dopo annullamento. Nessuna modifica a fingerprint esistenti.
-- 5 nuovi test D Windows superati, inclusi EUR/CHF, rollback a metà inserimento,
-  preview senza scritture, file cambiato dopo preview, conferma GUI, annullamento
-  con/senza dipendenze e reimport. 3 test import preesistenti superati.
-- BPER EUR/PDF/XLSX bancari hanno interfaccia read(payload) predisposta, parser non
-  implementati né collaudati. XLSX anagrafiche strutturate è una funzione distinta.
+C. Fornitori con note, categoria abituale, alternative, alias, archiviazione/riattivazione,
+avvisi duplicati e collisioni alias. Salvataggio atomico delle anagrafiche.
+Categorie con ID stabili, tipo, creazione/modifica/archiviazione, fornitori e movimenti collegati.
+Importatore strutturato con validazione e conferma CSV ; / XLSX, foglio Anagrafiche,
+intestazioni fornitore,categoria,tipo,alias,note. Il workbook personale non è nel checkout.
+La mappatura del layout originale Budget 2025_Marco.xlsx resta da eseguire.
 
+D. Revolut EUR/CHF con anteprima obbligatoria, snapshot immutabile del file confermato,
+provider/valuta, conteggi, anomalie, conferma esplicita e transazione unica.
+Lotti consultabili e annullabili. Dipendenze verificate sotto BEGIN IMMEDIATE.
+Conferma specifica per modifiche manuali/trasferimenti/rimborsi. Audit conserva snapshot
+integrali dei movimenti e dei collegamenti rimossi. I nuovi ID superano anche il massimo
+dell'audit per evitare riuso dell'identità dopo annullamento. Le altre gambe di trasferimento
+recuperano lo stato e la natura precedenti, preservando categorie e altre classificazioni.
+BPER EUR, PDF e XLSX bancari hanno soltanto interfaccia comune predisposta read(payload).
 
-- Sprint C schema 5. Fornitori con note, categorie alternative, archiviazione/riattivazione,
-  avviso duplicati e collisioni alias, salvataggio atomico. Movimenti collegati per
-  fornitore/categoria e fornitori collegati alla categoria consultabili dalla GUI.
-- Import anagrafiche strutturate CSV ; / XLSX, foglio Anagrafiche e colonne
-  fornitore,categoria,tipo,alias,note. Anteprima, conferma e transazione unica.
-  Workbook personale non presente nel checkout. Mappatura del layout storico originale
-  Budget 2025_Marco.xlsx NON eseguita e NON dichiarata collaudata.
-- Sprint C verificato con 4 test Windows, inclusi CSV/XLSX sintetici, duplicati,
-  alias, archiviazione, note, categorie alternative e dialogo GUI reale.
+E. Collegamento/scollegamento dal registro di due movimenti esistenti, con validazione
+di segni, conti, importi e dipendenze. Trasferimento, giroconto, prelievo verso cassa,
+rimborso e storno. Nessuna nuova gamba artificiale. Importi/valute originali conservati,
+nessun tasso CHF/EUR inventato. Saldi aggiornati sui rispettivi conti, trasferimenti ed
+esclusi separati dal consuntivo, rimborsi riducono la spesa, commissioni esposte separatamente.
+Stato e natura dei trasferimenti coerenti. Scollegamento ripristina i valori precedenti.
 
+F. Budget operativo in una scheda GUI. Anno/mese, categoria stabile, valuta,
+inserimento/modifica, consuntivo, scostamento, totali entrate/uscite, commissioni e
+movimenti senza categoria segnalati. EUR/CHF separati. Nuovi budget persistiti anche
+come unità minori INTEGER, senza conversione massiva dei budget REAL legacy.
 
-- Sprint B operativo nella GUI. Modifica singola e multipla con conferma del numero
-  di movimenti, fornitore, categoria, stato, note e natura contabile. Importi immutabili.
-  Scelta esplicita tra modifica selezionati e regola futura, senza rielaborare lo storico.
-  Audit consultabile dal dialogo del movimento. Persistenza verificata.
-- Schema 4. Backup automatico prima di modificare un database esistente e prima
-  di ogni migrazione, controllo integrità della copia, chiusura esplicita, migrazioni
-  transazionali. Errore interrompe avvio con percorso copia e verifica versione/integrità.
-  Database appena creati senza dati utente inizializzati senza backup superflui.
-- Sprint B verificato con 5 test automatici su Windows, inclusi migrazione 3→4,
-  riapertura due volte, copia non valida, rollback di migrazione fallita, audit e GUI editor.
-- Test di ripristino rieseguiti dopo migrazione. Nessuna modifica alla funzione di ripristino.
+## Migrazioni e conservazione dati
 
+Store effettua un backup PRIMA di qualsiasi scrittura sullo schema di un database
+esistente da aggiornare. Ogni migrazione successiva ha una copia verificata con
+integrity_check prima di partire. Chiusura esplicita delle connessioni. Nessun backup
+superfluo per database appena creati senza dati utente. Migrazioni additive, versionate,
+idempotenti, transazionali. Eliminato executescript dal corpo transazionale delle migrazioni.
 
-- Registro operativo nella GUI con filtri combinabili per conto, testo, date ISO, categoria,
-  fornitore e stato. Pulsante Da classificare, ordinamento su ogni colonna, dettaglio originale,
-  legenda testuale e colori, scroll su entrambi gli assi, importi italiani tramite Decimal.
-- Eliminato il limite precedente di 100 movimenti dal percorso FinanceService.
-- Sprint A verificato con 3 test automatici su Windows, inclusi widget Tk reali e 150 movimenti.
-- Baseline 46a797e preservata. In sessione precedente 25 test passati su Windows,
-  collaudo manuale Alpha 0.1 dichiarato dall'utente.
-- EXE Alpha 0.2 non prodotto. Collaudo manuale della nuova GUI pendente.
-- Git CLI indisponibile per scaricamento (errore DNS). Sorgenti letti e commit pubblicati
-  mediante connessione GitHub, con controllo HEAD e aggiornamento fast-forward.
+Fallimento interrompe l'avvio. Verifica integrità/versione dopo rollback e mostra il
+percorso della copia precedente. Copie conservate in backups accanto al database.
+La funzione di backup/ripristino di 46a797e non è stata modificata.
 
-## Roadmap
+I fingerprint Alpha 0.1 mantengono la stessa formula, inclusa la formattazione float
+storica per l'identità. Non vengono ricalcolati fingerprint già salvati.
+Gli importi bancari legacy restano REAL. Verifiche, consuntivi e budget nuovi usano Decimal
+o unità minori. Futura migrazione di tutti gli importi verso rappresentazione esatta
+richiederà strategia approvata e test di preservazione, senza conversione massiva in questo rilascio.
 
-Percentuali stimate di copertura del prodotto, distinte dai risultati dei test.
-I nomi seguono la roadmap del master prompt Alpha 0.2.
+## Funzionalità collaudate
 
-| Fase | Architettura | Operativa GUI | Collaudata |
+Eseguito su Windows, Python 3.12.14, SQLite 3.53.1, solo database sintetici sotto
+cartelle temporanee del checkout, dati applicazione rediretti con CONTAFLOW_DATA_DIR.
+
+Comando finale eseguito con l'interprete del runtime disponibile
+    python -m unittest discover -s tests -v
+
+Esito finale 53 superati, 0 falliti, 0 saltati, 7,416 secondi.
+Include tutti i 25 test della baseline e 28 nuovi test.
+Inclusi widget Tk reali controllati automaticamente, non collaudo manuale.
+
+- A query combinate, 150 righe, ordinamento, formato italiano e GUI.
+- B migrazione sintetica schema Alpha 0.1 v3→v6, riapertura due volte senza nuova
+  migrazione, copia verificata PRIMA delle nuove colonne, rollback di migrazione fallita,
+  copia non valida che blocca aggiornamento, audit/persistenza, modifica multipla GUI,
+  regola futura che non modifica lo storico.
+- C CSV e XLSX sintetici nel formato esplicito, duplicati, alias, note, categorie alternative,
+  archiviazione, editor GUI e navigazione ai movimenti collegati.
+- D EUR/CHF, preview senza scritture, snapshot, deduplica con identità legacy,
+  errore a metà inserimento senza righe o lotto residuo, conferma GUI,
+  annullamento con/senza dipendenze, reimport senza riuso degli ID audit,
+  rifiuto di importi NaN, infiniti o fuori dal range REAL.
+- E link/unlink, saldo/commissioni, valute distinte, limiti rimborso,
+  annullamento lotto collegato e preservazione classificazione precedente.
+- F budget esatto, valute distinte, esclusione trasferimenti/esclusi, GUI e riapertura.
+- Baseline ripristino Windows, chiusura connessioni, WAL, sicurezza e distinzione errori/avvisi.
+
+## Roadmap delle 12 fasi
+
+Percentuali stimate di copertura funzionale del prodotto complessivo.
+Architettura e operatività non equivalgono al collaudo manuale.
+La numerazione segue i nomi e le priorità del master prompt Alpha 0.2;
+le fasi non dettagliate nel master mantengono gli ambiti del progetto.
+
+| Fase | Architettura | Operativa GUI | Collaudo automatico |
 |---|---:|---:|---|
-| 01 App Windows | 85% | 80% | Registro A automatico Windows |
-| 02 Import bancario | 85% | 80% | 8 test import Windows |
+| 01 App Windows | 90% | 90% | Registro e dialoghi Tk |
+| 02 Import bancario | 85% | 80% | Revolut e lotti |
 | 03 Conti e saldi iniziali | 40% | 20% | Baseline parziale |
-| 04 Contabilità e trasferimenti | 75% | 70% | 5 test E Windows |
+| 04 Contabilità e trasferimenti | 75% | 70% | Trasferimenti/rimborsi |
 | 05 Esportazioni | 0% | 0% | Pendente |
-| 06 Fornitori e categorie | 85% | 85% | 4 test C Windows |
+| 06 Fornitori e categorie | 85% | 85% | Anagrafiche e import strutturato |
 | 07 Ricorrenze | 0% | 0% | Pendente |
-| 08 Budget | 10% | 0% | Pendente |
-| 09 Dashboard | 40% | 40% | Baseline Alpha 0.1 |
+| 08 Budget | 75% | 75% | Budget mensile multivaluta |
+| 09 Dashboard | 65% | 65% | Saldi e consuntivi Decimal |
 | 10 AI locale | 0% | 0% | Non valutata |
 | 11 Google Sheets | 5% | 0% | Pendente |
-| 12 Distribuzione | 30% | 10% | Portable 0.1 manuale utente |
+| 12 Distribuzione | 40% | 10% | Script presente, EXE 0.2 pendente |
 
-## Lavori aperti
+## Limiti e prossimo incremento
 
-C completamento anagrafiche.
-F budget.
-Le migrazioni sicure sono operative. Collaudo manuale e EXE restano pendenti.
-BPER/PDF/XLSX predisposti come ambiti futuri, parser non collaudati.
+- Collaudo manuale Windows e compilazione portable Alpha 0.2 pendenti.
+- BPER/PDF/XLSX bancari non operativi. Occorrono esempi di formato.
+- Workbook storico personale non mappato. Solo importatore strutturato collaudato.
+- Inserimento manuale di una nuova gamba cassa non disponibile. I movimenti da collegare
+  devono già esistere. Rimborso in valuta diversa non automatizzato.
+- Saldi iniziali ancora privi di editor GUI, come nella baseline.
+- Gli importi REAL storici conservano i limiti della loro rappresentazione.
+- Il registro legge tutte le righe. Paginazione da valutare su archivi grandi.
 
-Gli importi SQLite REAL esistenti restano compatibili. Nuovi calcoli usano Decimal.
-Una futura migrazione verso importi esatti richiederà strategia e test dedicati,
-senza conversione massiva in questa versione.
+Pubblicazione tramite connessione GitHub con verifica HEAD e avanzamento fast-forward.
+Git CLI ha fallito per DNS. Nessuna attività su billing/Actions per sbloccarlo.
+
+Prima di aprire la nuova versione sul PC di casa, copiare a parte il database Alpha 0.1
+da %LOCALAPPDATA%\ContaFlow a programma chiuso. La nuova versione creerà comunque
+una copia automatica verificata prima della migrazione. Compilare con build_windows.bat
+e collaudare prima il portable con dati sintetici.

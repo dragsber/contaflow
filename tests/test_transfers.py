@@ -84,3 +84,10 @@ class TransferTests(unittest.TestCase):
         win = next(w for w in app.register.winfo_children() if w.winfo_class() == "Toplevel")
         next(w for w in win.winfo_children() if isinstance(w, ttk.Button)).invoke()
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM transfers").fetchone()[0], 1)
+
+    def test_transfer_category_is_consistent_with_dashboard(self):
+        movement = self.movement(-20)
+        category = self.service.create_category("Giroconti", "trasferimento")
+        self.service.update_movements([movement], {"category_id":category})
+        self.assertEqual(self.service.movements()[0]["classification_status"], "trasferimento")
+        self.assertEqual(self.service.summary("Revolut EUR")[0]["expenses"], Decimal(0))

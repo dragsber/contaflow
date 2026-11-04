@@ -1,6 +1,7 @@
 import csv
 import hashlib
 import io
+from math import isfinite
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
@@ -24,7 +25,7 @@ def read_rows(payload):
             continue
         try:
             amount, fee = Decimal(row["Importo"]), Decimal(row.get("Costo") or "0")
-            if not amount.is_finite() or not fee.is_finite() or fee < 0:
+            if not amount.is_finite() or not fee.is_finite() or fee < 0 or not isfinite(float(amount)) or not isfinite(float(fee)):
                 raise ValueError("Importi o commissioni non validi")
             datetime.fromisoformat(row.get("Data di completamento") or row["Data di inizio"])
             if not row["Valuta"] or not row["Descrizione"]:

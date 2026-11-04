@@ -98,8 +98,17 @@ def cancel_batch(db, batch_id, confirm_dependencies=False):
                                 (counterpart, "scollegamento_lotto", json.dumps(dict(current)), str(batch_id)),
                             )
                             if table == "transfers":
-                                db.execute("UPDATE transactions SET accounting_nature='ordinario',"
-                                           "classification_status='in_attesa' WHERE id=?", (counterpart,))
+                                history = db.execute(
+                                    "SELECT old_value FROM audit WHERE transaction_id=? "
+                                    "AND field='collegamento_contabile' ORDER BY id DESC LIMIT 1",
+                                    (counterpart,),
+                                ).fetchone()
+                                previous = json.loads(history[0]) if history and history[0] else {}
+                                db.execute(
+                                    "UPDATE transactions SET accounting_nature=?,classification_status=? WHERE id=?",
+                                    (previous.get("accounting_nature", "ordinario"),
+                                     previous.get("classification_status", "in_attesa"), counterpart),
+                                )
                     db.execute(
                         "INSERT INTO audit(transaction_id,field,old_value,new_value) VALUES(NULL,?,?,NULL)",
                         (f"annullamento_{table}", json.dumps(dict(link))),
