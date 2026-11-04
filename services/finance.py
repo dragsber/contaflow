@@ -8,6 +8,7 @@ from pathlib import Path
 from contaflow.runtime import log_exception
 from contaflow.store import Store
 from db.migrations import migrate
+from services.register import movements
 
 
 class RestoreVerificationError(RuntimeError):
@@ -63,8 +64,8 @@ class FinanceService:
             enriched.append(item)
         return enriched
 
-    def movements(self, account=None):
-        return self.store.recent(account)
+    def movements(self, account=None, **filters):
+        return movements(self.store.db, account, **filters)
 
     def import_revolut(self, path, account):
         result = self.store.import_revolut_detailed(path, account)

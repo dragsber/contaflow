@@ -1,40 +1,50 @@
-# Stato sviluppo ContaFlow · Alpha 0.1
+# ContaFlow · Alpha 0.2 — build intermedia
 
-- Ultimo commit funzionale pubblicato: f2aa6b3413e632a89dd5fd37f2683817adb5523b.
-- Incremento UI fornitori/classificazione: db4e96ee29405211f8498f48c627f5818a890c40; portable: 530cbc1d2b783821d21b6b73202cc932bc241fd8.
-- Branch remoto codex/contaflow-sviluppo verificato fino al commit f2aa6b3413e632a89dd5fd37f2683817adb5523b.
-- Fase attiva: Alpha Windows 0.1.
-- Architettura: Python, Tkinter/ttk, SQLite; GUI usa FinanceService; database sotto la cartella utente/configurabile; migrazioni versionate schema 3.
-- Implementato: schermate Dashboard, Movimenti, Importazione, Fornitori e Categorie; filtro conto; gestione fornitori/alias/categorie; revisione e riuso delle associazioni confermate.
-- Implementato: import Revolut con verifica conto/provider/valuta, duplicati, commissioni, stato transazionale e riconciliazione.
-- Implementato: backup/ripristino via SQLite, conferma prima del ripristino, copia di sicurezza automatica, log locale e script PyInstaller onedir.
-- Non implementato nell'Alpha: gestione GUI dei saldi iniziali; collegamenti bancari reali, servizi esterni, trasferimenti/rimborsi e budget.
-- Esecutore Python: blocco registrato una volta; python.exe risolve all'alias WindowsApps che non si avvia (Impossibile accedere al file). Nessun tentativo ripetuto; si è continuato tramite GitHub.
-- Collaudi del codice aggiornato: non eseguiti. I test sintetici precedenti sul classificatore e sulla migrazione v2 precedono queste modifiche e non coprono questo commit.
-- Build: EXE NON PRODOTTO. La build onedir è predisposta, ma non è stata compilata né avviata.
-- GUI grafica Windows: DA ESEGUIRE.
-- Stato Alpha: NON UTILIZZABILE con dati bancari reali finché i controlli a-f e il collaudo Windows non siano completati.
+Ultimo commit precedente all'incremento corrente: 46a797e5dde97379d9eb5143cddfb5bc0ac6ea48.
+L'incremento corrente è identificato dal commit che contiene questo file.
+Branch codex/contaflow-sviluppo. Fase attiva A completata, prossimo incremento B.
 
-| Controllo Alpha | Esito in questa sessione |
-|---|---|
-| a. Avvio applicazione/headless | NON ESEGUITO |
-| b. Migrazione database sintetico preesistente | NON ESEGUITO su questa versione |
-| c. Import sintetico Revolut e rifiuto conto incompatibile | NON ESEGUITO |
-| d. Conferma classificazione e riuso in import successivo | NON ESEGUITO |
-| e. Persistenza dopo chiusura/riapertura | NON ESEGUITO |
-| f. Backup e ripristino sintetici | NON ESEGUITO |
+## Funzioni e verifiche
 
-| Fase | Avanzamento stimato |
-|---|---:|
-| 01 Conti e movimenti | 80% |
-| 02 Importazioni | 65% |
-| 03 Dashboard e report | 40% |
-| 04 Trasferimenti e rimborsi | 10% |
-| 05 Esportazioni | 0% |
-| 06 Fornitori e categorie | 60% |
-| 07 Ricorrenze | 0% |
-| 08 Budget | 10% |
-| 09 Architettura/integrazione | 15% |
-| 10 Predisposizione AI locale | 0% |
-| 11 Backup e sicurezza locale | 30% |
-| 12 Distribuzione stabile | 15% |
+- Registro operativo nella GUI con filtri combinabili per conto, testo, date ISO, categoria,
+  fornitore e stato. Pulsante Da classificare, ordinamento su ogni colonna, dettaglio originale,
+  legenda testuale e colori, scroll su entrambi gli assi, importi italiani tramite Decimal.
+- Eliminato il limite precedente di 100 movimenti dal percorso FinanceService.
+- Sprint A verificato con 3 test automatici su Windows, inclusi widget Tk reali e 150 movimenti.
+- Baseline 46a797e preservata. In sessione precedente 25 test passati su Windows,
+  collaudo manuale Alpha 0.1 dichiarato dall'utente.
+- EXE Alpha 0.2 non prodotto. Collaudo manuale della nuova GUI pendente.
+- Git CLI indisponibile per scaricamento (errore DNS). Sorgenti letti e commit pubblicati
+  mediante connessione GitHub, con controllo HEAD e aggiornamento fast-forward.
+
+## Roadmap
+
+Percentuali stimate di copertura del prodotto, distinte dai risultati dei test.
+I nomi seguono la roadmap del master prompt Alpha 0.2.
+
+| Fase | Architettura | Operativa GUI | Collaudata |
+|---|---:|---:|---|
+| 01 App Windows | 85% | 80% | Registro A automatico Windows |
+| 02 Import bancario | 65% | 60% | Baseline Alpha 0.1 |
+| 03 Conti e saldi iniziali | 40% | 20% | Baseline parziale |
+| 04 Contabilità e trasferimenti | 10% | 0% | Pendente |
+| 05 Esportazioni | 0% | 0% | Pendente |
+| 06 Fornitori e categorie | 60% | 60% | Baseline Alpha 0.1 |
+| 07 Ricorrenze | 0% | 0% | Pendente |
+| 08 Budget | 10% | 0% | Pendente |
+| 09 Dashboard | 40% | 40% | Baseline Alpha 0.1 |
+| 10 AI locale | 0% | 0% | Non valutata |
+| 11 Google Sheets | 5% | 0% | Pendente |
+| 12 Distribuzione | 30% | 10% | Portable 0.1 manuale utente |
+
+## Lavori aperti
+
+B audit, modifica e classificazione multipla. C completamento anagrafiche.
+D anteprima obbligatoria e annullamento lotti. E trasferimenti/rimborsi. F budget.
+Prima di introdurre colonne nuove, rendere sicura la migrazione con backup automatico
+verificato, transazioni e diagnostica di errore. Nessuna migrazione nello sprint A.
+BPER/PDF/XLSX predisposti come ambiti futuri, parser non collaudati.
+
+Gli importi SQLite REAL esistenti restano compatibili. Nuovi calcoli usano Decimal.
+Una futura migrazione verso importi esatti richiederà strategia e test dedicati,
+senza conversione massiva in questa versione.

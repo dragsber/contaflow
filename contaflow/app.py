@@ -5,6 +5,7 @@ from tkinter import ttk, filedialog, messagebox, simpledialog
 
 from services.finance import FinanceService, RestoreVerificationError
 from contaflow.runtime import log_exception, show_error
+from contaflow.register import MovementRegister
 from adapters.google_sheets import GoogleSheetsAdapter
 from adapters.enable_banking import EnableBankingAdapter
 from adapters.local_ai import LocalAIAdapter
@@ -13,7 +14,7 @@ from adapters.local_ai import LocalAIAdapter
 class App(tk.Tk):
     def __init__(self, service=None):
         super().__init__()
-        self.title("ContaFlow · Alpha 0.1")
+        self.title("ContaFlow · Alpha 0.2 — build intermedia")
         self.geometry("1120x760")
         self.minsize(900, 620)
         self.store = service or FinanceService()
@@ -49,7 +50,7 @@ class App(tk.Tk):
         accounts = self.store.accounts()
         names = [row["name"] for row in accounts]
         self.account_rows = accounts
-        self.account_box.configure(values=names)
+        self.account_box.configure(values=names + ['Tutti i conti'])
         self.account_var.set(names[0] if names else "")
         self.refresh_all()
 
@@ -157,34 +158,12 @@ class App(tk.Tk):
         ).pack(anchor="w")
 
     def _build_movements(self):
-        ttk.Label(
-            self.movements_tab, text="Registro del conto selezionato",
-            font=("Segoe UI", 14, "bold"),
-        ).pack(anchor="w", pady=(0, 8))
-        columns = ("date", "description", "amount", "fee", "currency",
-                   "kind", "classification", "supplier", "category")
-        self.table = ttk.Treeview(
-            self.movements_tab, columns=columns, show="headings", height=22
+        self.register = MovementRegister(
+            self.movements_tab, self.store, lambda: None if self.account_var.get() == 'Tutti i conti' else self.account_var.get() or None,
+            self.edit_movement_classification,
         )
-        headings = [
-            ("date", "Data", 135, "w"), ("description", "Descrizione", 300, "w"),
-            ("amount", "Importo", 100, "e"), ("fee", "Commissione", 95, "e"),
-            ("currency", "Valuta", 65, "center"), ("kind", "Tipo", 115, "w"),
-            ("classification", "Stato", 105, "center"),
-            ("supplier", "Fornitore", 120, "w"), ("category", "Categoria", 120, "w"),
-        ]
-        for key, title, width, anchor in headings:
-            self.table.heading(key, text=title)
-            self.table.column(key, width=width, anchor=anchor)
-        for tag, color in [("classificato", "#176b37"), ("proposto", "#9a6700"),
-                           ("in_attesa", "#8b3a3a")]:
-            self.table.tag_configure(tag, foreground=color)
-        self.table.pack(fill="both", expand=True)
-        actions = ttk.Frame(self.movements_tab, padding=(0, 8, 0, 0))
-        actions.pack(fill="x")
-        ttk.Button(actions, text="Conferma / correggi classificazione",
-                   command=self.edit_movement_classification).pack(side="left")
-        ttk.Button(actions, text="Aggiorna", command=self.refresh_all).pack(side="right")
+        self.register.pack(fill="both", expand=True)
+        self.table = self.register.table
 
     def _build_import(self):
         ttk.Label(self.import_tab, text="Importazione CSV Revolut",
@@ -271,9 +250,9 @@ class App(tk.Tk):
         self.account_rows = self.store.accounts()
         names = [row["name"] for row in self.account_rows]
         self.account_box.configure(values=names)
-        if self.account_var.get() not in names:
+        if self.account_var.get() not in names + ['Tutti i conti']:
             self.account_var.set(names[0] if names else "")
-        account = self.account_var.get() or None
+        account = None if self.account_var.get() == 'Tutti i conti' else self.account_var.get() or None
         self._refresh_dashboard(account)
         self._refresh_movements(account)
         self.refresh_suppliers()
@@ -307,17 +286,7 @@ class App(tk.Tk):
         ).pack(side="left")
 
     def _refresh_movements(self, account):
-        self.table.delete(*self.table.get_children())
-        for row in self.store.movements(account):
-            status = row["classification_status"] or "in_attesa"
-            self.table.insert(
-                "", "end", iid=str(row["id"]),
-                values=(row["occurred_at"], row["description"],
-                        f"{row['amount']:+.2f}", f"{row['fee']:.2f}",
-                        row["currency"], row["kind"], status,
-                        row["supplier"] or "", row["category"] or ""),
-                tags=(status,),
-            )
+        self.register.refresh()
 
     def refresh_suppliers(self):
         if not hasattr(self, "suppliers_table"):
