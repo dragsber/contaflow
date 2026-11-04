@@ -67,10 +67,31 @@ class FinanceService:
     def movements(self, account=None, **filters):
         return movements(self.store.db, account, **filters)
 
+    def preview_import(self, path, account):
+        from services.imports import preview_import
+        return preview_import(self.store, path, account)
+
+    def confirm_import(self, preview):
+        from services.imports import confirm_import
+        return confirm_import(self.store, preview)
+
     def import_revolut(self, path, account):
-        result = self.store.import_revolut_detailed(path, account)
-        anomalies = self.store.reconcile_revolut_csv(path)
-        return {**result, "anomalies": anomalies}
+        return self.confirm_import(self.preview_import(path, account))
+
+    def import_batches(self):
+        return self.store.db.execute(
+            "SELECT i.*,a.name AS account,(SELECT COUNT(*) FROM transactions t "
+            "WHERE t.importation_id=i.id) AS movements FROM importations i "
+            "JOIN accounts a ON a.id=i.account_id ORDER BY i.id DESC"
+        ).fetchall()
+
+    def batch_dependencies(self, batch_id):
+        from services.imports import batch_dependencies
+        return batch_dependencies(self.store.db, batch_id)
+
+    def cancel_batch(self, batch_id, confirm_dependencies=False):
+        from services.imports import cancel_batch
+        return cancel_batch(self.store.db, batch_id, confirm_dependencies)
 
     def import_catalog(self, records):
         from services.catalog_import import import_catalog

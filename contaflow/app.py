@@ -175,7 +175,9 @@ class App(tk.Tk):
             wraplength=900, padding=(0, 8),
         ).pack(anchor="w")
         ttk.Button(self.import_tab, text="Seleziona CSV Revolut",
-                   command=self.import_csv).pack(anchor="w", pady=(0, 12))
+                   command=self.import_csv).pack(anchor="w", pady=(0, 6))
+        ttk.Button(self.import_tab, text="Gestisci lotti / annullamento",
+                   command=self.import_batches).pack(anchor="w", pady=(0, 6))
         self.import_summary = tk.Text(self.import_tab, height=7, wrap="word", state="disabled")
         self.import_summary.pack(fill="x", pady=(0, 12))
         ttk.Label(self.import_tab, text="Anomalie di riconciliazione",
@@ -536,59 +538,78 @@ class App(tk.Tk):
         edit_movements(self)
 
     def import_csv(self):
-        path = filedialog.askopenfilename(
-            filetypes=[("CSV Revolut", "*.csv"), ("Tutti i file", "*.*")]
-        )
+        path = filedialog.askopenfilename(filetypes=[("CSV Revolut", "*.csv"), ("Tutti i file", "*.*")])
         if not path:
             return
         try:
-            with open(path, encoding="utf-8-sig", newline="") as handle:
-                reader = csv.DictReader(handle)
-                if not reader.fieldnames or "Valuta" not in reader.fieldnames:
-                    raise ValueError("Il CSV non contiene la colonna Valuta")
-                currencies = {
-                    row["Valuta"].strip().upper()
-                    for row in reader
-                    if row.get("State", "").strip().upper() == "COMPLETATO"
-                }
-            account = self.account_var.get()
-            selected = next((row for row in self.account_rows if row["name"] == account), None)
-            if selected is None or selected["provider"] != "REVOLUT":
-                raise ValueError("Seleziona un conto Revolut. BPER e Cassa non sono compatibili.")
-            if currencies != {selected["currency"].upper()}:
-                raise ValueError(
-                    f"Valuta CSV ({', '.join(sorted(currencies)) or 'non rilevata'}) "
-                    f"non compatibile con {account} ({selected['currency']})."
-                )
-            self.tabs.select(self.import_tab)
-            self.anomalies.delete(*self.anomalies.get_children())
-            result = self.store.import_revolut(path, account)
-            anomalies = result.pop("anomalies")
-            for anomaly in anomalies:
-                self.anomalies.insert(
-                    "", "end",
-                    values=(anomaly["row"], anomaly["currency"],
-                            anomaly["expected_delta"], anomaly["actual_delta"]),
-                )
-            self.refresh_all()
+            preview = self.store.preview_import(path, self.account_var.get())
             report = (
-                f"Conto: {account}\nValuta: {', '.join(sorted(currencies))}\n"
-                f"Importati: {result['imported']}\n"
-                f"Duplicati saltati: {result['duplicates']}\n"
-                f"Escluse (non completate): {result['excluded']}\n"
-                f"Classificati automaticamente: {result['classified']}\n"
-                f"Proposte da confermare: {result['proposed']}\n"
-                f"In attesa: {result['pending']}\n"
-                f"Anomalie: {len(anomalies)}\nErrori: 0"
+                f"Conto: {preview.account}\nValuta: {preview.currency}\n"
+                f"Righe totali: {preview.total}\nImportabili: {preview.importable}\n"
+                f"Duplicati: {preview.duplicates}\nEscluse: {preview.excluded}\n"
+                f"Anomalie di riconciliazione: {len(preview.anomalies)}\n"
             )
+            self.tabs.select(self.import_tab)
             self.import_summary.configure(state="normal")
             self.import_summary.delete("1.0", "end")
-            self.import_summary.insert("1.0", report)
+            self.import_summary.insert("1.0", "ANTEPRIMA — nessun dato ancora importato\n" + report)
             self.import_summary.configure(state="disabled")
-            self.status_var.set(f"Importazione completata · {result['imported']} movimenti importati")
+            self.anomalies.delete(*self.anomalies.get_children())
+            for anomaly in preview.anomalies:
+                self.anomalies.insert("", "end", values=(
+                    anomaly["row"], anomaly["currency"], anomaly["expected_delta"], anomaly["actual_delta"]))
+            if not messagebox.askyesno("Conferma importazione", report + "\nImportare queste righe?", parent=self):
+                self.status_var.set("Importazione annullata")
+                return
+            result = self.store.confirm_import(preview)
+            self.refresh_all()
+            self.import_summary.configure(state="normal")
+            self.import_summary.insert("end", f"\nIMPORTATO — lotto {result['batch_id']}\n"
+                                       f"Importati: {result['imported']}\nDuplicati: {result['duplicates']}")
+            self.import_summary.configure(state="disabled")
+            self.status_var.set(f"Importazione completata · lotto {result['batch_id']}")
         except Exception as error:
-            self.status_var.set("Importazione non completata")
-            show_error(self, "Importazione non completata", "Il CSV non è stato importato.", error, "Import CSV Revolut")
+            show_error(self, "Importazione non completata", "Controlla il file e il conto selezionato.",
+                       error, "Import CSV Revolut")
+
+    def import_batches(self):
+        win = tk.Toplevel(self)
+        win.title("Lotti di importazione")
+        table = ttk.Treeview(win, columns=("file", "account", "when", "status", "count"), show="headings", height=12)
+        for key, label in (("file","File"), ("account","Conto"), ("when","Data"), ("status","Esito"), ("count","Movimenti")):
+            table.heading(key, text=label)
+            table.column(key, width=170)
+        table.pack(fill="both", expand=True)
+
+        def refresh():
+            table.delete(*table.get_children())
+            for row in self.store.import_batches():
+                table.insert("", "end", iid=str(row["id"]), values=(
+                    row["file_name"], row["account"], row["imported_at"], row["result"], row["movements"]))
+
+        def cancel():
+            if not table.selection():
+                return
+            batch_id = int(table.selection()[0])
+            dependencies = self.store.batch_dependencies(batch_id)
+            extra = any(dependencies[key] for key in ("manual", "transfers", "refunds"))
+            text = (f"Annullare lotto {batch_id}? Movimenti da rimuovere: {dependencies['movements']}.\n"
+                    f"Modificati manualmente: {dependencies['manual']}. "
+                    f"Collegamenti trasferimenti: {dependencies['transfers']}, rimborsi: {dependencies['refunds']}.\n")
+            if extra:
+                text += ("CONFERMA SPECIFICA — saranno rimossi anche i collegamenti. "
+                         "Le altre gambe di trasferimento torneranno In attesa. "
+                         "I valori rimossi saranno conservati nell'audit.")
+            if not messagebox.askyesno("Conferma annullamento lotto", text, parent=win):
+                return
+            try:
+                self.store.cancel_batch(batch_id, confirm_dependencies=extra)
+                refresh()
+                self.refresh_all()
+            except Exception as error:
+                show_error(win, "Lotto non annullato", str(error), error, "Annullamento lotto")
+        ttk.Button(win, text="Annulla lotto selezionato", command=cancel).pack(anchor="w", padx=8, pady=8)
+        refresh()
 
 
 def main():

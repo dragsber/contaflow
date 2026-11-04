@@ -134,45 +134,54 @@ class Store:
         result=self.import_revolut_detailed(file,account)
         return result['imported'],result['duplicates']+result['excluded']
 
-    def import_revolut_detailed(self, file, account='Revolut EUR'):
-        imported=duplicates=excluded=classified=proposed=pending=0
-        account_row=self.db.execute('SELECT id,currency,provider FROM accounts WHERE name=?',(account,)).fetchone()
-        if account_row is None:
-            raise ValueError(f"Conto non configurato: {account}")
-        if account_row['provider'] != 'REVOLUT':
-            raise ValueError(f"Il conto {account} non è un conto Revolut")
-        account_id,currency_expected=account_row['id'],account_row['currency'].upper()
-        with open(file,encoding='utf-8-sig',newline='') as handle:
-            reader=csv.DictReader(handle)
-            required={'Tipo','Data di inizio','Descrizione','Importo','Valuta','State'}
-            if not reader.fieldnames or not required.issubset(reader.fieldnames):
-                raise ValueError('Schema CSV Revolut non riconosciuto')
-            with self.db:
-                batch=self.db.execute('INSERT INTO importations(file_name,account_id,result) VALUES(?,?,?)',(Path(file).name,account_id,'in_progress')).lastrowid
-                for row in reader:
-                    if row.get('State','').strip().upper()!='COMPLETATO':
-                        excluded+=1
-                        continue
-                    when=row.get('Data di completamento') or row.get('Data di inizio')
-                    amount=float(row['Importo']); fee=float(row.get('Costo') or 0)
-                    currency=row['Valuta'].strip().upper()
-                    if currency != currency_expected:
-                        raise ValueError(f"Valuta {currency} incompatibile con il conto {account} ({currency_expected})")
-                    description=row['Descrizione']
-                    fingerprint=hashlib.sha256((account+'|'+when+'|'+row['Tipo']+'|'+description+'|'+str(amount)+'|'+currency+'|'+str(fee)).encode()).hexdigest()
-                    classification=self.classify_description(description)
-                    cursor=self.db.execute(
-                        'INSERT OR IGNORE INTO transactions(fingerprint,account_id,occurred_at,description,amount,currency,fee,kind,status,source_json,supplier_id,category_id,classification_status,classification_origin,importation_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                        (fingerprint,account_id,when,description,amount,currency,fee,row['Tipo'],'COMPLETATO',json.dumps(row,ensure_ascii=False,sort_keys=True),classification['supplier_id'],classification['category_id'],classification['status'],classification['origin'],batch))
-                    if cursor.rowcount:
-                        imported+=1
-                        if classification['status']=='classificato': classified+=1
-                        elif classification['status']=='proposto': proposed+=1
-                        else: pending+=1
-                    else:
-                        duplicates+=1
-                self.db.execute("UPDATE importations SET result='completed' WHERE id=?",(batch,))
-        return {'imported':imported,'duplicates':duplicates,'excluded':excluded,'classified':classified,'proposed':proposed,'pending':pending}
+    def import_revolut_detailed(self, file, account='Revolut EUR', *, rows=None):
+        from adapters.revolut import read_rows, fingerprint
+        account_row = self.db.execute(
+            "SELECT id,currency,provider FROM accounts WHERE name=?", (account,)
+        ).fetchone()
+        if account_row is None or account_row["provider"] != "REVOLUT":
+            raise ValueError("Seleziona un conto Revolut configurato")
+        if rows is None:
+            rows = read_rows(Path(file).read_bytes())
+        result = dict.fromkeys(("imported", "duplicates", "excluded", "classified", "proposed", "pending"), 0)
+        with self.db:
+            batch = self.db.execute(
+                "INSERT INTO importations(file_name,account_id,result) VALUES(?,?,'in_progress')",
+                (Path(file).name, account_row["id"]),
+            ).lastrowid
+            next_id = self.db.execute(
+                "SELECT MAX(value)+1 FROM (SELECT COALESCE(MAX(id),0) value FROM transactions "
+                "UNION ALL SELECT COALESCE(MAX(transaction_id),0) FROM audit)"
+            ).fetchone()[0]
+            for row in rows:
+                if row.get("State", "").strip().upper() != "COMPLETATO":
+                    result["excluded"] += 1
+                    continue
+                currency = row["Valuta"].strip().upper()
+                if currency != account_row["currency"].upper():
+                    raise ValueError(f"Valuta {currency} incompatibile con il conto {account}")
+                identity = fingerprint(account, row)
+                if self.db.execute("SELECT 1 FROM transactions WHERE fingerprint=?", (identity,)).fetchone():
+                    result["duplicates"] += 1
+                    continue
+                classification = self.classify_description(row["Descrizione"])
+                self.db.execute(
+                    "INSERT INTO transactions(id,fingerprint,account_id,occurred_at,description,"
+                    "amount,currency,fee,kind,status,source_json,supplier_id,category_id,"
+                    "classification_status,classification_origin,importation_id) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,'COMPLETATO',?,?,?,?,?,?)",
+                    (next_id, identity, account_row["id"],
+                     row.get("Data di completamento") or row["Data di inizio"], row["Descrizione"],
+                     float(row["Importo"]), currency, float(row.get("Costo") or 0), row["Tipo"],
+                     json.dumps(row, ensure_ascii=False, sort_keys=True), classification["supplier_id"],
+                     classification["category_id"], classification["status"], classification["origin"], batch),
+                )
+                next_id += 1
+                result["imported"] += 1
+                result[{"classificato":"classified", "proposto":"proposed", "in_attesa":"pending"}[classification["status"]]] += 1
+            self.db.execute("UPDATE importations SET result='completed' WHERE id=?", (batch,))
+        return {**result, "batch_id": batch}
+
     def summary(self, account=None):
         sql='SELECT a.name,a.currency,COALESCE(SUM(t.amount-t.fee),0) balance,COALESCE(SUM(CASE WHEN t.amount>0 THEN t.amount ELSE 0 END),0) income,COALESCE(SUM(CASE WHEN t.amount<0 THEN t.amount ELSE 0 END),0) expenses FROM accounts a LEFT JOIN transactions t ON t.account_id=a.id AND t.status="COMPLETATO"'
         if account: return self.db.execute(sql+' WHERE a.name=? GROUP BY a.id',(account,)).fetchall()

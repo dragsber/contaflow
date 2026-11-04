@@ -1,10 +1,25 @@
 # ContaFlow · Alpha 0.2 — build intermedia
 
-Ultimo commit precedente all'incremento corrente: b5f492a010114ff3953088ec610b3f1fbbce3d00.
+Ultimo commit precedente all'incremento corrente: 955c9a577e2a74cfe2e23209444ae85aa5127dd1.
 L'incremento corrente è identificato dal commit che contiene questo file.
-Branch codex/contaflow-sviluppo. Fase attiva C completata per formato strutturato, prossimo incremento D.
+Branch codex/contaflow-sviluppo. Fase attiva D completata, prossimo incremento E.
 
 ## Funzioni e verifiche
+
+- Sprint D operativo GUI. Anteprima obbligatoria Revolut EUR/CHF e conferma esplicita,
+  snapshot immutabile del file, valuta/provider, anomalie, conteggi, deduplica storica
+  compatibile con fingerprint Alpha 0.1. Conservata la rappresentazione float SOLO per
+  l'identità dei fingerprint e per la persistenza REAL legacy. Nuove verifiche Decimal.
+- Lotti consultabili e annullabili dalla GUI. Controllo dipendenze sotto BEGIN IMMEDIATE,
+  conferma specifica per modifiche manuali/trasferimenti/rimborsi. Audit conserva snapshot
+  integrale dei movimenti eliminati e dei collegamenti. ID nuovi oltre il massimo dell'audit
+  per evitare riuso dell'identità dopo annullamento. Nessuna modifica a fingerprint esistenti.
+- 5 nuovi test D Windows superati, inclusi EUR/CHF, rollback a metà inserimento,
+  preview senza scritture, file cambiato dopo preview, conferma GUI, annullamento
+  con/senza dipendenze e reimport. 3 test import preesistenti superati.
+- BPER EUR/PDF/XLSX bancari hanno interfaccia read(payload) predisposta, parser non
+  implementati né collaudati. XLSX anagrafiche strutturate è una funzione distinta.
+
 
 - Sprint C schema 5. Fornitori con note, categorie alternative, archiviazione/riattivazione,
   avviso duplicati e collisioni alias, salvataggio atomico. Movimenti collegati per
@@ -49,7 +64,7 @@ I nomi seguono la roadmap del master prompt Alpha 0.2.
 | Fase | Architettura | Operativa GUI | Collaudata |
 |---|---:|---:|---|
 | 01 App Windows | 85% | 80% | Registro A automatico Windows |
-| 02 Import bancario | 65% | 60% | Baseline Alpha 0.1 |
+| 02 Import bancario | 85% | 80% | 8 test import Windows |
 | 03 Conti e saldi iniziali | 40% | 20% | Baseline parziale |
 | 04 Contabilità e trasferimenti | 10% | 0% | Pendente |
 | 05 Esportazioni | 0% | 0% | Pendente |
@@ -64,7 +79,7 @@ I nomi seguono la roadmap del master prompt Alpha 0.2.
 ## Lavori aperti
 
 C completamento anagrafiche.
-D anteprima obbligatoria e annullamento lotti. E trasferimenti/rimborsi. F budget.
+E trasferimenti/rimborsi. F budget.
 Le migrazioni sicure sono operative. Collaudo manuale e EXE restano pendenti.
 BPER/PDF/XLSX predisposti come ambiti futuri, parser non collaudati.
 
