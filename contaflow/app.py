@@ -459,58 +459,8 @@ class App(tk.Tk):
             self.refresh_all()
 
     def edit_movement_classification(self):
-        movement_id = self._selected_id(self.table, "un movimento")
-        if movement_id is None:
-            return
-        movement = next(
-            row for row in self.store.movements(self.account_var.get())
-            if int(row["id"]) == movement_id
-        )
-        suppliers = self.store.suppliers()
-        categories = self.store.categories()
-        supplier_names = ["— Nessuno —"] + [row["name"] for row in suppliers]
-        category_names = ["— Nessuna —"] + [row["name"] for row in categories]
-        win = tk.Toplevel(self)
-        win.title("Classificazione movimento")
-        win.transient(self)
-        form = ttk.Frame(win, padding=14)
-        form.pack(fill="both", expand=True)
-        ttk.Label(form, text=movement["description"], wraplength=500).grid(
-            row=0, column=0, columnspan=2, sticky="w", pady=(0, 10)
-        )
-        supplier_var = tk.StringVar(value=movement["supplier"] or "— Nessuno —")
-        category_var = tk.StringVar(value=movement["category"] or "— Nessuna —")
-        ttk.Label(form, text="Fornitore").grid(row=1, column=0, sticky="w", pady=5)
-        ttk.Combobox(form, textvariable=supplier_var, values=supplier_names,
-                     state="readonly").grid(row=1, column=1, sticky="ew")
-        ttk.Label(form, text="Categoria").grid(row=2, column=0, sticky="w", pady=5)
-        ttk.Combobox(form, textvariable=category_var, values=category_names,
-                     state="readonly").grid(row=2, column=1, sticky="ew")
-        remember_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
-            form, text="Conferma e riusa questa descrizione nei prossimi import",
-            variable=remember_var,
-        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=8)
-        def save():
-            supplier_id = next(
-                (row["id"] for row in suppliers if row["name"] == supplier_var.get()), None
-            )
-            category_id = next(
-                (row["id"] for row in categories if row["name"] == category_var.get()), None
-            )
-            try:
-                self.store.classify_movement(
-                    movement_id, supplier_id, category_id, remember_var.get()
-                )
-                win.destroy()
-                self.refresh_all()
-            except Exception as error:
-                show_error(win, "Classificazione non salvata", "Impossibile aggiornare la classificazione.", error, "Classificazione movimento")
-        ttk.Button(form, text="Salva classificazione", command=save).grid(
-            row=4, column=1, sticky="e", pady=(10, 0)
-        )
-        form.columnconfigure(1, weight=1)
-        win.grab_set()
+        from contaflow.movement_editor import edit_movements
+        edit_movements(self)
 
     def import_csv(self):
         path = filedialog.askopenfilename(

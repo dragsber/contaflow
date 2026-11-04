@@ -1,10 +1,23 @@
 # ContaFlow · Alpha 0.2 — build intermedia
 
-Ultimo commit precedente all'incremento corrente: 46a797e5dde97379d9eb5143cddfb5bc0ac6ea48.
+Ultimo commit precedente all'incremento corrente: e358d186e9bc3dd99627f401fd841637fe36699b.
 L'incremento corrente è identificato dal commit che contiene questo file.
-Branch codex/contaflow-sviluppo. Fase attiva A completata, prossimo incremento B.
+Branch codex/contaflow-sviluppo. Fase attiva B completata, prossimo incremento C.
 
 ## Funzioni e verifiche
+
+- Sprint B operativo nella GUI. Modifica singola e multipla con conferma del numero
+  di movimenti, fornitore, categoria, stato, note e natura contabile. Importi immutabili.
+  Scelta esplicita tra modifica selezionati e regola futura, senza rielaborare lo storico.
+  Audit consultabile dal dialogo del movimento. Persistenza verificata.
+- Schema 4. Backup automatico prima di modificare un database esistente e prima
+  di ogni migrazione, controllo integrità della copia, chiusura esplicita, migrazioni
+  transazionali. Errore interrompe avvio con percorso copia e verifica versione/integrità.
+  Database appena creati senza dati utente inizializzati senza backup superflui.
+- Sprint B verificato con 5 test automatici su Windows, inclusi migrazione 3→4,
+  riapertura due volte, copia non valida, rollback di migrazione fallita, audit e GUI editor.
+- Test di ripristino rieseguiti dopo migrazione. Nessuna modifica alla funzione di ripristino.
+
 
 - Registro operativo nella GUI con filtri combinabili per conto, testo, date ISO, categoria,
   fornitore e stato. Pulsante Da classificare, ordinamento su ogni colonna, dettaglio originale,
@@ -39,10 +52,9 @@ I nomi seguono la roadmap del master prompt Alpha 0.2.
 
 ## Lavori aperti
 
-B audit, modifica e classificazione multipla. C completamento anagrafiche.
+C completamento anagrafiche.
 D anteprima obbligatoria e annullamento lotti. E trasferimenti/rimborsi. F budget.
-Prima di introdurre colonne nuove, rendere sicura la migrazione con backup automatico
-verificato, transazioni e diagnostica di errore. Nessuna migrazione nello sprint A.
+Le migrazioni sicure sono operative. Collaudo manuale e EXE restano pendenti.
 BPER/PDF/XLSX predisposti come ambiti futuri, parser non collaudati.
 
 Gli importi SQLite REAL esistenti restano compatibili. Nuovi calcoli usano Decimal.

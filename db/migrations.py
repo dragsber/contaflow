@@ -1,6 +1,9 @@
 import sqlite3
+from contextlib import closing
+from datetime import datetime
+from pathlib import Path
 
-LATEST_SCHEMA_VERSION = 3
+LATEST_SCHEMA_VERSION = 4
 
 
 def _columns(connection, table):
@@ -14,7 +17,7 @@ def _add_column(connection, table, declaration):
 
 
 def _migration_2(connection):
-    connection.executescript("""
+    _execute_statements(connection, """
     CREATE TABLE IF NOT EXISTS importations (
         id INTEGER PRIMARY KEY,
         file_name TEXT NOT NULL,
@@ -101,17 +104,90 @@ def _migration_3(connection):
                 "confirmed INTEGER NOT NULL DEFAULT 0 CHECK (confirmed IN (0,1))")
 
 
-def migrate(connection: sqlite3.Connection) -> None:
-    connection.execute('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)')
-    row = connection.execute('SELECT version FROM schema_version LIMIT 1').fetchone()
-    version = row[0] if row else 0
-    if version < 1:
-        connection.execute('INSERT INTO schema_version(version) VALUES (1)')
-        version = 1
-    if version < 2:
-        _migration_2(connection)
-        connection.execute('UPDATE schema_version SET version=2')
-    if version < 3:
-        _migration_3(connection)
-        connection.execute('UPDATE schema_version SET version=3')
-    connection.commit()
+class MigrationError(RuntimeError):
+    pass
+
+
+def schema_version(connection):
+    exists = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version'"
+    ).fetchone()
+    if not exists:
+        return 0
+    row = connection.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
+    return row[0] if row else 0
+
+
+def _execute_statements(connection, script):
+    statement = ""
+    for line in script.splitlines(keepends=True):
+        statement += line
+        if sqlite3.complete_statement(statement):
+            connection.execute(statement)
+            statement = ""
+    if statement.strip():
+        raise ValueError("Migrazione SQL incompleta")
+
+
+def backup_before_upgrade(connection):
+    version = schema_version(connection)
+    if version > LATEST_SCHEMA_VERSION:
+        raise MigrationError("Database creato con una versione più recente di ContaFlow")
+    if version == LATEST_SCHEMA_VERSION:
+        return None
+    tables = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1"
+    ).fetchone()
+    path = connection.execute("PRAGMA database_list").fetchone()[2]
+    if not tables:
+        return None
+    if not path:
+        raise MigrationError("Migrazione di database esistente in memoria non supportata")
+    folder = Path(path).parent / "backups"
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"ContaFlow_pre_migrazione_v{version}_{datetime.now():%Y%m%d_%H%M%S_%f}.sqlite3"
+    try:
+        with closing(sqlite3.connect(target)) as backup:
+            connection.backup(backup)
+            if backup.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
+                raise sqlite3.DatabaseError("Copia di sicurezza non integra")
+    except Exception as error:
+        raise MigrationError(
+            f"Migrazione non avviata. Verifica della copia di sicurezza fallita: {target}"
+        ) from error
+    return str(target)
+
+
+def _migration_4(connection):
+    _add_column(connection, "transactions", "notes TEXT NOT NULL DEFAULT ''")
+    _add_column(connection, "transactions", "accounting_nature TEXT NOT NULL DEFAULT 'ordinario'")
+
+
+def migrate(connection: sqlite3.Connection, *, new_database=False) -> None:
+    if connection.in_transaction:
+        raise MigrationError("Completa la transazione prima di aggiornare il database")
+    version = schema_version(connection)
+    if version > LATEST_SCHEMA_VERSION:
+        raise MigrationError("Database creato con una versione più recente di ContaFlow")
+    migrations = {1: lambda db: None, 2: _migration_2, 3: _migration_3, 4: _migration_4}
+    for target_version in range(version + 1, LATEST_SCHEMA_VERSION + 1):
+        safety = None if new_database else backup_before_upgrade(connection)
+        previous = schema_version(connection)
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
+            migrations[target_version](connection)
+            connection.execute("DELETE FROM schema_version")
+            connection.execute("INSERT INTO schema_version(version) VALUES (?)", (target_version,))
+            if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                raise sqlite3.DatabaseError("Controllo di integrità della migrazione fallito")
+            connection.commit()
+        except Exception as error:
+            connection.rollback()
+            integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+            actual = schema_version(connection)
+            raise MigrationError(
+                f"Aggiornamento database interrotto alla versione {target_version}. "
+                f"Integrità dopo rollback: {integrity}. Versione attesa {previous}, rilevata {actual}. "
+                f"Copia precedente: {safety or 'database nuovo senza dati utente'}"
+            ) from error

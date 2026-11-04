@@ -1,7 +1,7 @@
 import csv, os, sqlite3, hashlib, json
 from pathlib import Path
 from datetime import datetime
-from db.migrations import migrate
+from db.migrations import migrate, backup_before_upgrade, MigrationError, schema_version
 
 DEFAULT_ACCOUNTS = [('Revolut EUR','EUR','REVOLUT'),('Revolut CHF','CHF','REVOLUT'),('BPER EUR','EUR','BPER'),('Cassa contanti','EUR','CASH')]
 
@@ -22,22 +22,40 @@ class Store:
         self.path = str(path or data_path())
         self.db = sqlite3.connect(self.path)
         self.db.row_factory = sqlite3.Row
-        self.db.executescript("""
-        PRAGMA foreign_keys=ON;
-        CREATE TABLE IF NOT EXISTS accounts(id INTEGER PRIMARY KEY,name TEXT UNIQUE,currency TEXT NOT NULL,provider TEXT NOT NULL DEFAULT 'UNKNOWN');
-        CREATE TABLE IF NOT EXISTS categories(id INTEGER PRIMARY KEY,name TEXT UNIQUE);
-        CREATE TABLE IF NOT EXISTS merchants(id INTEGER PRIMARY KEY,name TEXT UNIQUE,category_id INTEGER REFERENCES categories(id));
-        CREATE TABLE IF NOT EXISTS transactions(id INTEGER PRIMARY KEY, fingerprint TEXT UNIQUE, account_id INTEGER REFERENCES accounts(id), occurred_at TEXT NOT NULL, description TEXT NOT NULL, amount REAL NOT NULL, currency TEXT NOT NULL, fee REAL NOT NULL DEFAULT 0, kind TEXT NOT NULL, status TEXT NOT NULL, category_id INTEGER REFERENCES categories(id), source_json TEXT NOT NULL, imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,transaction_id INTEGER,field TEXT,old_value TEXT,new_value TEXT,changed_at TEXT DEFAULT CURRENT_TIMESTAMP);
-        """)
-        columns = {row['name'] for row in self.db.execute('PRAGMA table_info(accounts)')}
-        if 'provider' not in columns:
-            self.db.execute("ALTER TABLE accounts ADD COLUMN provider TEXT NOT NULL DEFAULT 'UNKNOWN'")
-        for name, currency, provider in DEFAULT_ACCOUNTS:
-            self.db.execute('INSERT OR IGNORE INTO accounts(name,currency,provider) VALUES(?,?,?)', (name,currency,provider))
-            self.db.execute('UPDATE accounts SET provider=? WHERE name=? AND provider=\'UNKNOWN\'', (provider,name))
-        self.db.commit()
-        migrate(self.db)
+        is_new = self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone() is None
+        safety = None
+        try:
+            safety = backup_before_upgrade(self.db)
+            self.db.executescript("""
+            PRAGMA foreign_keys=ON;
+            CREATE TABLE IF NOT EXISTS accounts(id INTEGER PRIMARY KEY,name TEXT UNIQUE,currency TEXT NOT NULL,provider TEXT NOT NULL DEFAULT 'UNKNOWN');
+            CREATE TABLE IF NOT EXISTS categories(id INTEGER PRIMARY KEY,name TEXT UNIQUE);
+            CREATE TABLE IF NOT EXISTS merchants(id INTEGER PRIMARY KEY,name TEXT UNIQUE,category_id INTEGER REFERENCES categories(id));
+            CREATE TABLE IF NOT EXISTS transactions(id INTEGER PRIMARY KEY, fingerprint TEXT UNIQUE, account_id INTEGER REFERENCES accounts(id), occurred_at TEXT NOT NULL, description TEXT NOT NULL, amount REAL NOT NULL, currency TEXT NOT NULL, fee REAL NOT NULL DEFAULT 0, kind TEXT NOT NULL, status TEXT NOT NULL, category_id INTEGER REFERENCES categories(id), source_json TEXT NOT NULL, imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,transaction_id INTEGER,field TEXT,old_value TEXT,new_value TEXT,changed_at TEXT DEFAULT CURRENT_TIMESTAMP);
+            """)
+            columns = {row['name'] for row in self.db.execute('PRAGMA table_info(accounts)')}
+            if 'provider' not in columns:
+                self.db.execute("ALTER TABLE accounts ADD COLUMN provider TEXT NOT NULL DEFAULT 'UNKNOWN'")
+            for name, currency, provider in DEFAULT_ACCOUNTS:
+                self.db.execute('INSERT OR IGNORE INTO accounts(name,currency,provider) VALUES(?,?,?)', (name,currency,provider))
+                self.db.execute('UPDATE accounts SET provider=? WHERE name=? AND provider=\'UNKNOWN\'', (provider,name))
+            self.db.commit()
+            migrate(self.db, new_database=is_new)
+        except Exception as error:
+            try:
+                self.db.rollback()
+                try:
+                    integrity = self.db.execute("PRAGMA integrity_check").fetchone()[0]
+                    version = schema_version(self.db)
+                except sqlite3.Error:
+                    integrity, version = "non verificabile", "non verificabile"
+            finally:
+                self.db.close()
+            raise MigrationError(
+                f"Avvio interrotto. Integrità database: {integrity}. Versione: {version}. "
+                f"Copia precedente: {safety or 'vedi dettaglio errore'}. {error}"
+            ) from error
     @staticmethod
     def normalize_description(value):
         import re

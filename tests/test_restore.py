@@ -208,7 +208,7 @@ class RestoreTests(unittest.TestCase):
         self.assertEqual(app.account_var.get(), "Conto ripristinato")
         self.assertIn("-7.00 EUR", app.account_heading.cget("text"))
         movement, = app.table.get_children()
-        self.assertEqual(app.table.item(movement, "values")[1], "Movimento test")
+        self.assertEqual(app.table.set(movement, "description"), "Movimento test")
         supplier, = app.suppliers_table.get_children()
         self.assertEqual(app.suppliers_table.item(supplier, "values")[0], "Fornitore test")
         item, = app.categories_table.get_children()

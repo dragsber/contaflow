@@ -174,34 +174,19 @@ class FinanceService:
     def classify_movement(
         self, movement_id, supplier_id=None, category_id=None, remember_alias=False
     ):
-        row = self.store.db.execute(
-            "SELECT description FROM transactions WHERE id=?", (movement_id,)
-        ).fetchone()
-        if row is None:
-            raise ValueError("Movimento non trovato")
         status = "classificato" if category_id is not None else "proposto"
-        origin = "manuale"
-        with self.store.db:
-            if remember_alias and supplier_id is not None:
-                alias = self.store.normalize_description(row["description"])
-                if not alias:
-                    raise ValueError("Descrizione non valida per l'associazione")
-                self.store.db.execute(
-                    "INSERT INTO supplier_aliases(normalized_alias,supplier_id,confirmed) "
-                    "VALUES(?,?,1) ON CONFLICT(normalized_alias) DO UPDATE SET "
-                    "supplier_id=excluded.supplier_id,confirmed=1",
-                    (alias, supplier_id),
-                )
-                self.store.db.execute(
-                    "UPDATE suppliers SET habitual_category_id=? WHERE id=?",
-                    (category_id, supplier_id),
-                )
-                origin = "confermata"
-            self.store.db.execute(
-                "UPDATE transactions SET supplier_id=?,category_id=?,"
-                "classification_status=?,classification_origin=? WHERE id=?",
-                (supplier_id, category_id, status, origin, movement_id),
-            )
+        return self.update_movements([movement_id], {
+            "supplier_id": supplier_id, "category_id": category_id,
+            "classification_status": status,
+        }, remember=remember_alias)
+
+    def update_movements(self, movement_ids, changes, remember=False):
+        from services.editing import update_movements
+        return update_movements(self.store, movement_ids, changes, remember)
+
+    def movement_audit(self, movement_id):
+        from services.editing import movement_audit
+        return movement_audit(self.store.db, movement_id)
 
     def reconcile_movement(self, movement_id, supplier_id, category_id):
         """Confirm a movement and remember its exact normalized bank description."""
