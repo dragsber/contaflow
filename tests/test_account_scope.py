@@ -2,9 +2,11 @@ import csv
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from contaflow.store import Store
+from db.migrations import LATEST_SCHEMA_VERSION
 
 
 FIELDS = ['Tipo','Prodotto','Data di inizio','Data di completamento',
@@ -32,10 +34,10 @@ class AccountScopeTests(unittest.TestCase):
             db.commit()
             db.close()
             store = Store(path)
-            self.assertEqual(store.db.execute("SELECT provider FROM accounts WHERE name='Revolut EUR'").fetchone()[0], 'REVOLUT')
-            self.assertEqual({row['provider'] for row in store.accounts()}, {'REVOLUT','BPER','CASH'})
-            self.assertEqual(store.db.execute('SELECT version FROM schema_version').fetchone()[0], 1)
-            store.db.close()
+            with closing(store.db):
+                self.assertEqual(store.db.execute("SELECT provider FROM accounts WHERE name='Revolut EUR'").fetchone()[0], 'REVOLUT')
+                self.assertEqual({row['provider'] for row in store.accounts()}, {'REVOLUT','BPER','CASH'})
+                self.assertEqual(store.db.execute('SELECT version FROM schema_version').fetchone()[0], LATEST_SCHEMA_VERSION)
 
     def test_account_filter_and_balance_are_scoped(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -1,10 +1,28 @@
+import logging
 import sqlite3
 import tempfile
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
+from contaflow.runtime import log_exception
 from contaflow.store import Store
 from db.migrations import migrate
+
+
+class RestoreVerificationError(RuntimeError):
+    """La copia SQLite è terminata, ma la verifica del database attivo è fallita."""
+
+
+def _restore_counts(db):
+    if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+        raise sqlite3.DatabaseError("Controllo di integrità non superato")
+    if db.execute("PRAGMA foreign_key_check").fetchone() is not None:
+        raise sqlite3.IntegrityError("Riferimenti contabili non validi")
+    row = db.execute(
+        "SELECT (SELECT COUNT(*) FROM accounts), (SELECT COUNT(*) FROM transactions)"
+    ).fetchone()
+    return tuple(row)
 
 
 class FinanceService:
@@ -213,33 +231,50 @@ class FinanceService:
             raise ValueError("Il file di backup selezionato non esiste")
         if source == Path(self.store.path).resolve():
             raise ValueError("Seleziona un backup diverso dal database attivo")
-        self.store.db.commit()
-        with tempfile.TemporaryDirectory(prefix="contaflow-restore-") as temp_dir:
-            staged_path = Path(temp_dir) / "validated.sqlite3"
-            with sqlite3.connect(str(source)) as original:
-                integrity = original.execute("PRAGMA integrity_check").fetchone()[0]
-                if integrity != "ok":
-                    raise ValueError("Il backup selezionato non supera il controllo di integrità")
-                table_names = {
-                    row[0] for row in original.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table'"
-                    )
-                }
-                if not {"accounts", "categories", "transactions"}.issubset(table_names):
-                    raise ValueError("Il file selezionato non è un database ContaFlow")
-                staged = sqlite3.connect(str(staged_path))
-                try:
+        active = self.store.db
+        if active.in_transaction:
+            raise ValueError("Completa l'operazione in corso prima del ripristino")
+        temp = tempfile.TemporaryDirectory(prefix="contaflow-restore-")
+        copied = False
+        try:
+            staged_path = Path(temp.name) / "validated.sqlite3"
+            with closing(sqlite3.connect(str(staged_path))) as staged:
+                with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as original:
+                    if original.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                        raise ValueError("Il backup selezionato non supera il controllo di integrità")
+                    table_names = {
+                        row[0] for row in original.execute(
+                            "SELECT name FROM sqlite_master WHERE type='table'"
+                        )
+                    }
+                    if not {"accounts", "categories", "transactions"}.issubset(table_names):
+                        raise ValueError("Il file selezionato non è un database ContaFlow")
                     original.backup(staged)
-                    migrate(staged)
-                    if staged.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-                        raise ValueError("Il backup non è integro dopo la migrazione")
-                    if staged.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0:
-                        raise ValueError("Il backup non contiene conti")
-                    staged.commit()
-                finally:
-                    staged.close()
-            safety_copy = self.backup_database()
-            with sqlite3.connect(str(staged_path)) as validated:
-                validated.backup(self.store.db)
-            self.store.db.execute("PRAGMA foreign_keys=ON")
+                migrate(staged)
+                staged.commit()
+                expected = _restore_counts(staged)
+                if not expected[0]:
+                    raise ValueError("Il backup non contiene conti")
+                safety_copy = self.backup_database()
+                staged.backup(active)
+                copied = True
+            active.execute("PRAGMA foreign_keys=ON")
+            if _restore_counts(active) != expected:
+                raise sqlite3.IntegrityError("Numero di conti o movimenti incoerente")
             return safety_copy
+        except sqlite3.Error as error:
+            if not copied:
+                raise
+            raise RestoreVerificationError(
+                "Copia eseguita, ma verifica del database attivo fallita. "
+                f"Copia di sicurezza del precedente:\n{safety_copy}"
+            ) from error
+        finally:
+            try:
+                temp.cleanup()
+            except OSError as error:
+                context = f"Pulizia della cartella temporanea di ripristino non riuscita: {temp.name}"
+                try:
+                    log_exception(error, context, level=logging.WARNING)
+                except OSError:
+                    logging.getLogger(__name__).warning(context, exc_info=True)

@@ -1,11 +1,10 @@
 import logging
 from logging.handlers import RotatingFileHandler
-from tkinter import messagebox
 
 from contaflow.store import data_directory
 
 
-def log_exception(error, context, traceback=None):
+def log_exception(error, context, traceback=None, *, level=logging.ERROR):
     log_path = data_directory() / "contaflow.log"
     logger = logging.getLogger("contaflow")
     if not logger.handlers:
@@ -14,12 +13,14 @@ def log_exception(error, context, traceback=None):
         )
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
         logger.addHandler(handler)
-        logger.setLevel(logging.ERROR)
-    logger.error(context, exc_info=(type(error), error, traceback or error.__traceback__))
+        logger.setLevel(logging.WARNING)
+    logger.log(level, context, exc_info=(type(error), error, traceback or error.__traceback__))
     return str(log_path)
 
 
 def show_error(parent, title, user_message, error, context):
+    from tkinter import messagebox
+
     log_path = log_exception(error, context)
     messagebox.showerror(
         title,

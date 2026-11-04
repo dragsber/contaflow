@@ -1,8 +1,9 @@
 import csv
+import sqlite3
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 
-from services.finance import FinanceService
+from services.finance import FinanceService, RestoreVerificationError
 from contaflow.runtime import log_exception, show_error
 from adapters.google_sheets import GoogleSheetsAdapter
 from adapters.enable_banking import EnableBankingAdapter
@@ -93,16 +94,38 @@ class App(tk.Tk):
             return
         try:
             safety_copy = self.store.restore_database(path)
-            self.refresh_all()
+        except RestoreVerificationError as error:
+            self.status_var.set("Verifica del ripristino fallita")
+            show_error(self, "Errore critico di ripristino", str(error), error, "Verifica ripristino")
+            return
+        except Exception as error:
+            show_error(self, "Ripristino non completato",
+                       "Il backup non è stato ripristinato.", error, "Ripristino database")
+            return
+        try:
             self.status_var.set("Database ripristinato")
+            self.import_summary.configure(state="normal")
+            self.import_summary.delete("1.0", "end")
+            self.import_summary.configure(state="disabled")
+            self.anomalies.delete(*self.anomalies.get_children())
+            self.refresh_all()
             messagebox.showinfo(
                 "Ripristino completato",
                 f"Database ripristinato. Copia di sicurezza del precedente:\n{safety_copy}",
                 parent=self,
             )
+        except sqlite3.DatabaseError as error:
+            self.status_var.set("Errore critico di lettura")
+            show_error(self, "Errore critico di lettura",
+                       f"Copia eseguita, ma lettura dei dati fallita. Copia di sicurezza:\n{safety_copy}",
+                       error, "Lettura dopo ripristino")
         except Exception as error:
-            show_error(self, "Ripristino non completato",
-                       "Il backup non è stato ripristinato.", error, "Ripristino database")
+            messagebox.showwarning(
+                "Ripristino completato",
+                f"Database ripristinato. Riapri ContaFlow per aggiornare le viste.\n{error}\n"
+                f"Copia di sicurezza del precedente:\n{safety_copy}",
+                parent=self,
+            )
 
     def _build_header(self):
         header = ttk.Frame(self, padding=(12, 10))
