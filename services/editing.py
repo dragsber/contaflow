@@ -17,7 +17,10 @@ def update_movements(store, movement_ids, changes, remember=False):
     if "accounting_nature" in changes and changes["accounting_nature"] not in NATURES:
         raise ValueError("Natura contabile non valida")
     db = store.db
+    if db.in_transaction:
+        raise ValueError("Completa la transazione in corso")
     with db:
+        db.execute("BEGIN IMMEDIATE")
         for field, table in (("supplier_id", "suppliers"), ("category_id", "categories")):
             value = changes.get(field)
             if value is not None and db.execute(
@@ -28,6 +31,12 @@ def update_movements(store, movement_ids, changes, remember=False):
             row = db.execute("SELECT * FROM transactions WHERE id=?", (movement_id,)).fetchone()
             if row is None:
                 raise ValueError("Movimento non trovato")
+            transfer = db.execute(
+                "SELECT 1 FROM transfers WHERE movement_out_id=? OR movement_in_id=?", (movement_id, movement_id)
+            ).fetchone()
+            if transfer and any(field in changes and changes[field] != row[field]
+                                for field in ("classification_status", "accounting_nature")):
+                raise ValueError("Scollega il trasferimento prima di cambiarne stato o natura")
             updates = {**changes, "classification_origin": "confermata" if remember else "manuale"}
             supplier = changes.get("supplier_id", row["supplier_id"])
             category = changes.get("category_id", row["category_id"])

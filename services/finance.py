@@ -36,7 +36,8 @@ class FinanceService:
         return self.store.accounts()
 
     def summary(self, account=None):
-        summaries = self.store.summary(account)
+        from services.transfers import account_summary
+        summaries = account_summary(self.store, account)
         enriched = []
         for row in summaries:
             item = dict(row)
@@ -63,6 +64,14 @@ class FinanceService:
                 item["bank_balance"] = None
             enriched.append(item)
         return enriched
+
+    def unlink_movement(self, movement_id):
+        from services.transfers import unlink_movement
+        return unlink_movement(self.store.db, movement_id)
+
+    def link_movements(self, outgoing_id, incoming_id, kind):
+        from services.transfers import link_movements
+        return link_movements(self.store.db, outgoing_id, incoming_id, kind)
 
     def movements(self, account=None, **filters):
         return movements(self.store.db, account, **filters)

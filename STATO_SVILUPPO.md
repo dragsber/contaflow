@@ -1,10 +1,23 @@
 # ContaFlow · Alpha 0.2 — build intermedia
 
-Ultimo commit precedente all'incremento corrente: 955c9a577e2a74cfe2e23209444ae85aa5127dd1.
+Ultimo commit precedente all'incremento corrente: 7ad02f8f4cc04e1041de2fa4666ec2e96da52b1c.
 L'incremento corrente è identificato dal commit che contiene questo file.
-Branch codex/contaflow-sviluppo. Fase attiva D completata, prossimo incremento E.
+Branch codex/contaflow-sviluppo. Fase attiva E operativa per movimenti esistenti, prossimo incremento F.
 
 ## Funzioni e verifiche
+
+- Sprint E collegamento e scollegamento dal registro di movimenti già presenti,
+  trasferimento, giroconto, prelievo verso cassa, rimborso e storno.
+  Validazione segni, conti, importi, dipendenze e residuo rimborsabile. Audit dei collegamenti.
+  Nessun reinserimento delle due gambe. CHF/EUR originali conservati, tasso non inventato.
+- Dashboard con nuovi calcoli Decimal. Saldi includono le due gambe sui rispettivi conti.
+  Entrate/uscite escludono trasferimenti ed esclusi dal consuntivo. Commissioni separate.
+  Rimborsi/storni positivi riducono la spesa.
+- Sprint E verificato con 5 test Windows, inclusi GUI collegamento, valute,
+  saldo/commissioni, limite rimborsi, scollegamento e annullamento di lotto collegato.
+- Limite E documentato. Inserimento manuale di una nuova gamba cassa non disponibile.
+  Occorre che entrambe le gambe esistano. Rimborso in valuta diversa non automatizzato.
+
 
 - Sprint D operativo GUI. Anteprima obbligatoria Revolut EUR/CHF e conferma esplicita,
   snapshot immutabile del file, valuta/provider, anomalie, conteggi, deduplica storica
@@ -66,7 +79,7 @@ I nomi seguono la roadmap del master prompt Alpha 0.2.
 | 01 App Windows | 85% | 80% | Registro A automatico Windows |
 | 02 Import bancario | 85% | 80% | 8 test import Windows |
 | 03 Conti e saldi iniziali | 40% | 20% | Baseline parziale |
-| 04 Contabilità e trasferimenti | 10% | 0% | Pendente |
+| 04 Contabilità e trasferimenti | 75% | 70% | 5 test E Windows |
 | 05 Esportazioni | 0% | 0% | Pendente |
 | 06 Fornitori e categorie | 85% | 85% | 4 test C Windows |
 | 07 Ricorrenze | 0% | 0% | Pendente |
@@ -79,7 +92,7 @@ I nomi seguono la roadmap del master prompt Alpha 0.2.
 ## Lavori aperti
 
 C completamento anagrafiche.
-E trasferimenti/rimborsi. F budget.
+F budget.
 Le migrazioni sicure sono operative. Collaudo manuale e EXE restano pendenti.
 BPER/PDF/XLSX predisposti come ambiti futuri, parser non collaudati.
 

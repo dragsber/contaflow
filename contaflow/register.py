@@ -39,6 +39,11 @@ class MovementRegister(ttk.Frame):
         ttk.Button(actions, text="Azzera filtri", command=self.reset).pack(side="left", padx=6)
         ttk.Button(actions, text="Da classificare", command=self.unclassified).pack(side="left")
         ttk.Button(actions, text="Modifica selezionati", command=edit).pack(side="left", padx=6)
+        links = ttk.Frame(self)
+        links.pack(fill="x", pady=3)
+        ttk.Button(links, text="Collega due movimenti",
+                   command=self.link_selected).pack(side="left")
+        ttk.Button(links, text="Scollega", command=self.unlink_selected).pack(side="left")
         self.count = ttk.Label(actions)
         self.count.pack(side="right")
         headings = (
@@ -75,6 +80,45 @@ class MovementRegister(ttk.Frame):
         self.detail = tk.Text(self, height=5, wrap="word", state="disabled")
         self.detail.pack(fill="x")
         self.table.bind("<<TreeviewSelect>>", self.show_detail)
+
+    def unlink_selected(self):
+        selected = self.table.selection()
+        if len(selected) != 1:
+            messagebox.showinfo("Scollegamento", "Seleziona un solo movimento.", parent=self)
+            return
+        if messagebox.askyesno("Conferma scollegamento",
+                              "Rimuovere tutti i collegamenti contabili del movimento selezionato?",
+                              parent=self):
+            self.service.unlink_movement(int(selected[0]))
+            self.winfo_toplevel().refresh_all()
+
+    def link_selected(self):
+        selected = [self.rows[iid] for iid in self.table.selection()]
+        if len(selected) != 2:
+            messagebox.showwarning("Collegamento", "Seleziona due movimenti, un'uscita e un'entrata.", parent=self)
+            return
+        selected.sort(key=lambda row: row["amount"])
+        outgoing, incoming = selected
+        win = tk.Toplevel(self)
+        win.title("Collegamento contabile")
+        ttk.Label(win, text=(
+            f"Uscita: {outgoing['account']} — {money(outgoing['amount'], outgoing['currency'])}\n"
+            f"Entrata: {incoming['account']} — {money(incoming['amount'], incoming['currency'])}\n"
+            "Saranno collegate le registrazioni esistenti. Commissioni separate."
+        ), padding=12).pack()
+        kind = tk.StringVar(value="trasferimento")
+        ttk.Combobox(win, textvariable=kind, state="readonly", values=(
+            "trasferimento", "prelievo", "giroconto", "rimborso", "storno",
+        )).pack(padx=12, pady=6)
+
+        def save():
+            try:
+                self.service.link_movements(outgoing["id"], incoming["id"], kind.get())
+                win.destroy()
+                self.winfo_toplevel().refresh_all()
+            except Exception as error:
+                messagebox.showerror("Collegamento non salvato", str(error), parent=win)
+        ttk.Button(win, text="Conferma collegamento", command=save).pack(pady=12)
 
     def reset(self):
         for var in self.filters.values():

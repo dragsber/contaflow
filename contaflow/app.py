@@ -348,7 +348,8 @@ class App(tk.Tk):
         ttk.Label(
             self.cards,
             text=f"Entrate {row['income']:.2f} {currency}     "
-                 f"Uscite {row['expenses']:.2f} {currency}",
+                 f"Uscite {row['expenses']:.2f} {currency}     "
+                 f"Commissioni {row['fees']:.2f} {currency}",
             padding=14, relief="groove",
         ).pack(side="left")
 
