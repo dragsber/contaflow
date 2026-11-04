@@ -72,6 +72,17 @@ class FinanceService:
         anomalies = self.store.reconcile_revolut_csv(path)
         return {**result, "anomalies": anomalies}
 
+    def import_catalog(self, records):
+        from services.catalog_import import import_catalog
+        return import_catalog(self.store.db, records, self.store.normalize_description)
+
+    def category_suppliers(self, category_id):
+        return self.store.db.execute(
+            "SELECT DISTINCT s.name FROM suppliers s LEFT JOIN supplier_categories a "
+            "ON a.supplier_id=s.id WHERE s.habitual_category_id=? OR a.category_id=? ORDER BY s.name",
+            (category_id, category_id),
+        ).fetchall()
+
     def categories(self, include_archived=False):
         sql = "SELECT id,name,category_type,is_custom,archived FROM categories"
         if not include_archived:
@@ -109,15 +120,58 @@ class FinanceService:
                 (category_id,),
             )
 
-    def suppliers(self, search=""):
+    def suppliers(self, search="", include_archived=False):
         term = f"%{search.strip().upper()}%"
         return self.store.db.execute(
-            "SELECT s.id,s.name,s.habitual_category_id,c.name AS category "
+            "SELECT s.id,s.name,s.habitual_category_id,s.notes,s.archived,c.name AS category "
             "FROM suppliers s LEFT JOIN categories c "
-            "ON c.id=s.habitual_category_id WHERE s.archived=0 AND UPPER(s.name) LIKE ? "
+            "ON c.id=s.habitual_category_id WHERE (s.archived=0 OR ?) AND UPPER(s.name) LIKE ? "
             "ORDER BY s.name",
-            (term,),
+            (include_archived, term),
         ).fetchall()
+
+    def save_supplier(self, name, category_id=None, alias="", notes="", alternatives=(), supplier_id=None):
+        name = " ".join(name.upper().split())
+        if not name:
+            raise ValueError("Nome fornitore obbligatorio")
+        db = self.store.db
+        with db:
+            duplicate = db.execute(
+                "SELECT id FROM suppliers WHERE name=? AND id!=COALESCE(?,0)",
+                (name, supplier_id),
+            ).fetchone()
+            if duplicate:
+                raise ValueError("Fornitore già presente. Verifica anche i fornitori archiviati.")
+            key = self.store.normalize_description(alias) if alias.strip() else ""
+            existing = db.execute(
+                "SELECT supplier_id FROM supplier_aliases WHERE normalized_alias=?", (key,)
+            ).fetchone()
+            if existing and existing[0] != supplier_id:
+                raise ValueError("Alias già presente per un altro fornitore")
+            if supplier_id is None:
+                supplier_id = db.execute(
+                    "INSERT INTO suppliers(name,habitual_category_id,notes) VALUES(?,?,?)",
+                    (name, category_id, notes),
+                ).lastrowid
+            else:
+                db.execute("UPDATE suppliers SET name=?,habitual_category_id=?,notes=? WHERE id=?",
+                           (name, category_id, notes, supplier_id))
+            db.execute("DELETE FROM supplier_categories WHERE supplier_id=?", (supplier_id,))
+            for alternative in set(alternatives):
+                db.execute("INSERT INTO supplier_categories VALUES(?,?)", (supplier_id, alternative))
+            if key and not existing:
+                db.execute("INSERT INTO supplier_aliases(normalized_alias,supplier_id) VALUES(?,?)",
+                           (key, supplier_id))
+        return supplier_id
+
+    def archive_supplier(self, supplier_id, archived=True):
+        with self.store.db:
+            self.store.db.execute("UPDATE suppliers SET archived=? WHERE id=?", (int(archived), supplier_id))
+
+    def supplier_categories(self, supplier_id):
+        return [row[0] for row in self.store.db.execute(
+            "SELECT category_id FROM supplier_categories WHERE supplier_id=?", (supplier_id,)
+        )]
 
     def supplier_aliases(self, supplier_id):
         return self.store.db.execute(
@@ -159,6 +213,11 @@ class FinanceService:
         key = self.store.normalize_description(alias)
         if not key:
             raise ValueError("Alias vuoto")
+        existing = self.store.db.execute(
+            "SELECT supplier_id FROM supplier_aliases WHERE normalized_alias=?", (key,)
+        ).fetchone()
+        if existing is not None and existing[0] != supplier_id:
+            raise ValueError("Alias già associato a un altro fornitore. Verifica il duplicato.")
         with self.store.db:
             self.store.db.execute(
                 "INSERT INTO supplier_aliases(normalized_alias,supplier_id,confirmed) "

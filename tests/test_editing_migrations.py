@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from contaflow.store import Store
-from db.migrations import MigrationError
+from db.migrations import MigrationError, LATEST_SCHEMA_VERSION
 from services.finance import FinanceService
 
 
@@ -41,7 +41,7 @@ class EditingMigrationTests(unittest.TestCase):
         count = len(list((self.folder / "backups").glob("*")))
         for _ in range(2):
             with closing(Store(self.path).db) as db:
-                self.assertEqual(db.execute("SELECT version FROM schema_version").fetchone()[0], 4)
+                self.assertEqual(db.execute("SELECT version FROM schema_version").fetchone()[0], LATEST_SCHEMA_VERSION)
         self.assertEqual(len(list((self.folder / "backups").glob("*"))), count)
 
     def test_failed_migration_rolls_back_and_keeps_original_backup(self):

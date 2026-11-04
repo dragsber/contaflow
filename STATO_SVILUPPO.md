@@ -1,10 +1,21 @@
 # ContaFlow · Alpha 0.2 — build intermedia
 
-Ultimo commit precedente all'incremento corrente: e358d186e9bc3dd99627f401fd841637fe36699b.
+Ultimo commit precedente all'incremento corrente: b5f492a010114ff3953088ec610b3f1fbbce3d00.
 L'incremento corrente è identificato dal commit che contiene questo file.
-Branch codex/contaflow-sviluppo. Fase attiva B completata, prossimo incremento C.
+Branch codex/contaflow-sviluppo. Fase attiva C completata per formato strutturato, prossimo incremento D.
 
 ## Funzioni e verifiche
+
+- Sprint C schema 5. Fornitori con note, categorie alternative, archiviazione/riattivazione,
+  avviso duplicati e collisioni alias, salvataggio atomico. Movimenti collegati per
+  fornitore/categoria e fornitori collegati alla categoria consultabili dalla GUI.
+- Import anagrafiche strutturate CSV ; / XLSX, foglio Anagrafiche e colonne
+  fornitore,categoria,tipo,alias,note. Anteprima, conferma e transazione unica.
+  Workbook personale non presente nel checkout. Mappatura del layout storico originale
+  Budget 2025_Marco.xlsx NON eseguita e NON dichiarata collaudata.
+- Sprint C verificato con 4 test Windows, inclusi CSV/XLSX sintetici, duplicati,
+  alias, archiviazione, note, categorie alternative e dialogo GUI reale.
+
 
 - Sprint B operativo nella GUI. Modifica singola e multipla con conferma del numero
   di movimenti, fornitore, categoria, stato, note e natura contabile. Importi immutabili.
@@ -42,7 +53,7 @@ I nomi seguono la roadmap del master prompt Alpha 0.2.
 | 03 Conti e saldi iniziali | 40% | 20% | Baseline parziale |
 | 04 Contabilità e trasferimenti | 10% | 0% | Pendente |
 | 05 Esportazioni | 0% | 0% | Pendente |
-| 06 Fornitori e categorie | 60% | 60% | Baseline Alpha 0.1 |
+| 06 Fornitori e categorie | 85% | 85% | 4 test C Windows |
 | 07 Ricorrenze | 0% | 0% | Pendente |
 | 08 Budget | 10% | 0% | Pendente |
 | 09 Dashboard | 40% | 40% | Baseline Alpha 0.1 |

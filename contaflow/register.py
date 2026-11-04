@@ -92,7 +92,7 @@ class MovementRegister(ttk.Frame):
 
     def refresh(self):
         categories = self.service.categories(include_archived=True)
-        suppliers = self.service.suppliers()
+        suppliers = self.service.suppliers(include_archived=True)
         maps = {
             "category": {f"{r['id']} · {r['name']}": r["id"] for r in categories},
             "supplier": {f"{r['id']} · {r['name']}": r["id"] for r in suppliers},

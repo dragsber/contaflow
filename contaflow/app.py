@@ -199,11 +199,16 @@ class App(tk.Tk):
         search_bar.pack(fill="x")
         ttk.Label(search_bar, text="Cerca").pack(side="left")
         self.supplier_search = tk.StringVar()
+        self.show_archived_suppliers = tk.BooleanVar()
+        ttk.Checkbutton(search_bar, text="Includi archiviati",
+                        variable=self.show_archived_suppliers,
+                        command=self.refresh_suppliers).pack(side="left")
         search = ttk.Entry(search_bar, textvariable=self.supplier_search, width=32)
         search.pack(side="left", padx=6)
         search.bind("<KeyRelease>", lambda event: self.refresh_suppliers())
         ttk.Button(search_bar, text="Nuovo fornitore",
                    command=lambda: self.edit_supplier(new=True)).pack(side="right")
+        ttk.Button(search_bar, text="Importa anagrafiche", command=self.import_catalog).pack(side="right", padx=6)
         self.suppliers_table = ttk.Treeview(
             self.suppliers_tab, columns=("name", "category", "aliases"),
             show="headings", height=19,
@@ -223,6 +228,56 @@ class App(tk.Tk):
                    command=self.add_alias).pack(side="left", padx=6)
         ttk.Button(buttons, text="Rimuovi alias selezionato",
                    command=self.remove_alias).pack(side="left")
+        ttk.Button(buttons, text="Archivia / riattiva",
+                   command=self.toggle_supplier).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Movimenti collegati",
+                   command=lambda: self.related_movements("supplier")).pack(side="left")
+
+
+    def import_catalog(self):
+        from services.catalog_import import read_catalog
+        messagebox.showinfo(
+            "Formato anagrafiche",
+            "CSV con separatore ; oppure XLSX con foglio Anagrafiche.\n"
+            "Colonne richieste: fornitore, categoria, tipo, alias, note.\n"
+            "Tipi: entrata, uscita, trasferimento. Un fornitore per riga.\n"
+            "Il file storico originale richiede una mappatura verso questo formato.",
+            parent=self,
+        )
+        path = filedialog.askopenfilename(filetypes=[("Anagrafiche strutturate", "*.csv *.xlsx")])
+        if not path:
+            return
+        try:
+            rows = read_catalog(path)
+            if messagebox.askyesno("Anteprima anagrafiche",
+                                   f"Importare {len(rows)} righe validate? Le duplicazioni bloccano il lotto.",
+                                   parent=self):
+                self.store.import_catalog(rows)
+                self.refresh_all()
+        except Exception as error:
+            show_error(self, "Anagrafiche non importate", str(error), error, "Import anagrafiche")
+
+    def toggle_supplier(self):
+        supplier_id = self._selected_id(self.suppliers_table, "un fornitore")
+        if supplier_id is None:
+            return
+        row = next(r for r in self.store.suppliers(include_archived=True) if r["id"] == supplier_id)
+        if messagebox.askyesno("Stato fornitore", "Cambiare lo stato attivo / archiviato?", parent=self):
+            self.store.archive_supplier(supplier_id, not row["archived"])
+            self.refresh_all()
+
+    def related_movements(self, field):
+        table = self.suppliers_table if field == "supplier" else self.categories_table
+        identifier = self._selected_id(table, "una voce")
+        if identifier is None:
+            return
+        rows = self.store.suppliers(include_archived=True) if field == "supplier" else self.store.categories(True)
+        row = next(r for r in rows if r["id"] == identifier)
+        self.account_var.set("Tutti i conti")
+        self.register.reset()
+        self.register.filters[field].set(f"{identifier} · {row['name']}")
+        self.register.refresh()
+        self.tabs.select(self.movements_tab)
 
     def _build_categories(self):
         ttk.Label(self.categories_tab, text="Categorie",
@@ -245,6 +300,16 @@ class App(tk.Tk):
                    command=self.edit_category).pack(side="left", padx=6)
         ttk.Button(actions, text="Archivia selezionata",
                    command=self.archive_category).pack(side="left")
+        ttk.Button(actions, text="Movimenti collegati",
+                   command=lambda: self.related_movements("category")).pack(side="left", padx=6)
+        ttk.Button(actions, text="Fornitori collegati", command=self.category_suppliers).pack(side="left")
+
+    def category_suppliers(self):
+        category_id = self._selected_id(self.categories_table, "una categoria")
+        if category_id is None:
+            return
+        rows = self.store.category_suppliers(category_id)
+        messagebox.showinfo("Fornitori collegati", "\n".join(r[0] for r in rows) or "Nessun fornitore", parent=self)
 
     def refresh_all(self):
         self.account_rows = self.store.accounts()
@@ -292,13 +357,13 @@ class App(tk.Tk):
         if not hasattr(self, "suppliers_table"):
             return
         self.suppliers_table.delete(*self.suppliers_table.get_children())
-        for row in self.store.suppliers(self.supplier_search.get()):
+        for row in self.store.suppliers(self.supplier_search.get(), self.show_archived_suppliers.get()):
             aliases = ", ".join(
                 item["normalized_alias"] for item in self.store.supplier_aliases(row["id"])
             )
             self.suppliers_table.insert(
                 "", "end", iid=str(row["id"]),
-                values=(row["name"], row["category"] or "", aliases),
+                values=(row["name"] + (" [archiviato]" if row["archived"] else ""), row["category"] or "", aliases),
             )
 
     def refresh_categories(self):
@@ -327,7 +392,7 @@ class App(tk.Tk):
         if not is_new and not supplier_id:
             return
         current = None if is_new else next(
-            row for row in self.store.suppliers()
+            row for row in self.store.suppliers(include_archived=True)
             if int(row["id"]) == supplier_id
         )
         categories = self.store.categories()
@@ -351,27 +416,35 @@ class App(tk.Tk):
         )
         alias_var = tk.StringVar()
         ttk.Entry(form, textvariable=alias_var, width=38).grid(row=2, column=1, sticky="ew")
+        ttk.Label(form, text="Note").grid(row=3, column=0, sticky="w")
+        notes = tk.Text(form, height=3, width=38)
+        notes.grid(row=3, column=1)
+        notes.insert("1.0", "" if is_new else current["notes"])
+        ttk.Label(form, text="Categorie alternative").grid(row=4, column=0, sticky="w")
+        alternatives = tk.Listbox(form, selectmode="multiple", exportselection=False, height=5)
+        alternatives.grid(row=4, column=1, sticky="ew")
+        existing_alternatives = [] if is_new else self.store.supplier_categories(supplier_id)
+        for index, category in enumerate(categories):
+            alternatives.insert("end", category["name"])
+            if category["id"] in existing_alternatives:
+                alternatives.selection_set(index)
         def save():
             try:
                 category_id = next(
                     (row["id"] for row in categories if row["name"] == category_var.get()),
                     None,
                 )
-                if is_new:
-                    self.store.create_supplier(
-                        name_var.get(), [alias_var.get()] if alias_var.get().strip() else (),
-                        category_id,
-                    )
-                else:
-                    self.store.update_supplier(supplier_id, name_var.get(), category_id)
-                    if alias_var.get().strip():
-                        self.store.add_supplier_alias(supplier_id, alias_var.get())
+                self.store.save_supplier(
+                    name_var.get(), category_id, alias_var.get(), notes.get("1.0", "end-1c"),
+                    [categories[index]["id"] for index in alternatives.curselection()],
+                    supplier_id,
+                )
                 win.destroy()
                 self.refresh_all()
             except Exception as error:
                 show_error(win, "Fornitore non salvato", "Controlla i dati inseriti.", error, "Salvataggio fornitore")
         ttk.Button(form, text="Salva", command=save).grid(
-            row=3, column=1, sticky="e", pady=(10, 0)
+            row=5, column=1, sticky="e", pady=(10, 0)
         )
         form.columnconfigure(1, weight=1)
         win.grab_set()
