@@ -13,7 +13,7 @@ class MovementRegister(ttk.Frame):
         self.sort, self.descending = "date", True
         self.rows = {}
         self.filters = {name: tk.StringVar() for name in
-                        ("search", "start", "end", "category", "supplier", "status")}
+                        ("search", "start", "end", "category", "supplier", "status", "ledger")}
         filters = ttk.Frame(self)
         filters.pack(fill="x")
         for column, (name, label) in enumerate((
@@ -33,6 +33,11 @@ class MovementRegister(ttk.Frame):
             box.grid(row=3, column=column, sticky="ew", padx=(0, 8), pady=(0, 6))
             box.bind("<<ComboboxSelected>>", lambda event: self.refresh())
             self.boxes[name] = box
+        ttk.Label(filters,text="Conto contabile").grid(row=4,column=0,sticky="w")
+        ledger_box = ttk.Combobox(filters,textvariable=self.filters["ledger"],state="readonly")
+        ledger_box.grid(row=5,column=0,columnspan=3,sticky="ew",pady=(0,5))
+        ledger_box.bind("<<ComboboxSelected>>",lambda event:self.refresh())
+        self.boxes["ledger"] = ledger_box
         actions = ttk.Frame(self)
         actions.pack(fill="x", pady=4)
         ttk.Button(actions, text="Applica filtri", command=self.refresh).pack(side="left")
@@ -44,14 +49,16 @@ class MovementRegister(ttk.Frame):
         ttk.Button(links, text="Collega due movimenti",
                    command=self.link_selected).pack(side="left")
         ttk.Button(links, text="Scollega", command=self.unlink_selected).pack(side="left")
+        ttk.Button(links,text="Assegna conto contabile",command=self.assign_ledger).pack(side="left",padx=8)
         self.count = ttk.Label(actions)
         self.count.pack(side="right")
         headings = (
-            ("date", "Data e ora", 145), ("account", "Conto", 125),
+            ("date", "Data e ora", 145), ("account", "Conto bancario", 145),
             ("description", "Descrizione", 300), ("amount", "Importo", 135),
             ("fee", "Commissione", 115), ("currency", "Valuta", 70),
             ("kind", "Tipo bancario", 125), ("classification", "Stato", 210),
             ("supplier", "Fornitore", 160), ("category", "Categoria", 160),
+            ("ledger", "Conto contabile", 170),
         )
         area = ttk.Frame(self)
         area.pack(fill="both", expand=True)
@@ -80,6 +87,10 @@ class MovementRegister(ttk.Frame):
         self.detail = tk.Text(self, height=5, wrap="word", state="disabled")
         self.detail.pack(fill="x")
         self.table.bind("<<TreeviewSelect>>", self.show_detail)
+
+    def assign_ledger(self):
+        from contaflow.ledger import assign_selected
+        assign_selected(self.winfo_toplevel())
 
     def unlink_selected(self):
         selected = self.table.selection()
@@ -138,6 +149,7 @@ class MovementRegister(ttk.Frame):
         categories = self.service.categories(include_archived=True)
         suppliers = self.service.suppliers(include_archived=True)
         maps = {
+            "ledger": {"Non assegnato":"unassigned",**{f"{r['code']} — {r['description']}":r["id"] for r in self.service.ledger.accounts(include_archived=True)}},
             "category": {f"{r['id']} · {r['name']}": r["id"] for r in categories},
             "supplier": {f"{r['id']} · {r['name']}": r["id"] for r in suppliers},
             "status": {**{label: key for key, label in STATUSES.items()},
@@ -168,6 +180,7 @@ class MovementRegister(ttk.Frame):
                 when, row["account"], row["description"], money(row["amount"], row["currency"]),
                 money(row["fee"], row["currency"]), row["currency"], row["kind"],
                 STATUSES.get(state, state), row["supplier"] or "", row["category"] or "",
+                row["ledger_code"] if row["ledger_code"] is not None else "Non assegnato",
             ), tags=(state,))
         self.table.selection_set([iid for iid in selected if iid in self.rows])
         self.count.configure(text=f"{len(rows)} movimenti")
@@ -179,7 +192,8 @@ class MovementRegister(ttk.Frame):
         if len(selected) == 1:
             row = self.rows[selected[0]]
             details = (
-                ("Identificativo", row["id"]), ("Conto", row["account"]),
+                ("Identificativo", row["id"]), ("Conto bancario", row["account"]),
+                ("Conto contabile",row["ledger_code"] if row["ledger_code"] is not None else "Non assegnato"),
                 ("Data e ora", row["occurred_at"]), ("Descrizione", row["description"]),
                 ("Importo", money(row["amount"],row["currency"])),
                 ("Commissione", money(row["fee"],row["currency"])),
@@ -189,6 +203,10 @@ class MovementRegister(ttk.Frame):
                 ("Lotto", row["importation_id"]),
             )
             text = "\n".join(f"{label}: {value}" for label, value in details)
+            choices = self.service.ledger.candidates(row["description"],row["supplier_id"])
+            if row["ledger_account_id"] is None and choices:
+                candidates = [r["code"] for r in self.service.ledger.accounts() if r["id"] in choices]
+                text += "\nConti contabili candidati (scelta richiesta): " + ", ".join(candidates)
             text += "\nDati bancari originali\n" + json.dumps(
                 json.loads(row["source_json"]), ensure_ascii=False, indent=2)
         elif selected:

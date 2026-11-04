@@ -16,8 +16,9 @@ def money(value, currency):
 
 
 def movements(db, account=None, *, search="", start="", end="", category=None,
-              supplier=None, status="", sort="date", descending=True):
+              supplier=None, status="", sort="date", descending=True, ledger=None):
     ordering = {
+        "ledger": "l.code",
         "date": "t.occurred_at", "description": "t.description COLLATE NOCASE",
         "amount": "t.amount", "fee": "t.fee", "currency": "t.currency",
         "kind": "t.kind", "classification": "t.classification_status",
@@ -38,6 +39,7 @@ def movements(db, account=None, *, search="", start="", end="", category=None,
         ("a.name=?", account), ("substr(t.occurred_at,1,10)>=?", start),
         ("substr(t.occurred_at,1,10)<=?", end), ("t.category_id=?", category),
         ("t.supplier_id=?", supplier),
+        ("t.ledger_account_id=?", ledger if ledger != "unassigned" else None),
     ):
         if value is not None and value != "":
             conditions.append(condition)
@@ -48,6 +50,8 @@ def movements(db, account=None, *, search="", start="", end="", category=None,
             "COALESCE(c.name,'')),lower(?))>0"
         )
         args.append(search.strip())
+    if ledger == "unassigned":
+        conditions.append("t.ledger_account_id IS NULL")
     if status == "da_classificare":
         conditions.append("t.classification_status IN ('in_attesa','proposto')")
     elif status:
@@ -56,10 +60,11 @@ def movements(db, account=None, *, search="", start="", end="", category=None,
         conditions.append("t.classification_status=?")
         args.append(status)
     sql = (
-        "SELECT t.*,a.name AS account,s.name AS supplier,c.name AS category "
+        "SELECT t.*,a.name AS account,s.name AS supplier,c.name AS category,l.code AS ledger_code "
         "FROM transactions t JOIN accounts a ON a.id=t.account_id "
         "LEFT JOIN suppliers s ON s.id=t.supplier_id "
-        "LEFT JOIN categories c ON c.id=t.category_id"
+        "LEFT JOIN categories c ON c.id=t.category_id "
+        "LEFT JOIN ledger_accounts l ON l.id=t.ledger_account_id"
     )
     if conditions:
         sql += " WHERE " + " AND ".join(conditions)

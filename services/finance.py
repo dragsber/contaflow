@@ -31,6 +31,8 @@ class FinanceService:
 
     def __init__(self, store=None):
         self.store = store or Store()
+        from services.ledger import LedgerService
+        self.ledger = LedgerService(self.store)
 
     def accounts(self):
         return self.store.accounts()

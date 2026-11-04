@@ -183,6 +183,13 @@ class Store:
                      classification["category_id"], classification["status"], classification["origin"], batch),
                 )
                 next_id += 1
+                from services.ledger import candidates
+                choices = candidates(self, row["Descrizione"], classification["supplier_id"])
+                if len(choices) == 1:
+                    self.db.execute("UPDATE transactions SET ledger_account_id=? WHERE id=?", (choices[0],next_id-1))
+                elif len(choices) > 1 and classification["status"] in ("classificato","proposto","in_attesa"):
+                    self.db.execute("UPDATE transactions SET classification_status='proposto' WHERE id=?", (next_id-1,))
+                    classification["status"] = "proposto"
                 result["imported"] += 1
                 result[{"classificato":"classified", "proposto":"proposed", "in_attesa":"pending", "trasferimento":"classified"}[classification["status"]]] += 1
             self.db.execute("UPDATE importations SET result='completed' WHERE id=?", (batch,))

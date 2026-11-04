@@ -1,4 +1,125 @@
-# ContaFlow · Alpha 0.2 — build intermedia
+# ContaFlow · Alpha 0.2 C-bis — build intermedia
+
+## Incremento C-bis
+
+Ultimo commit remoto di partenza verificato fb460f6ef5d2c905fdcaac41c83bd49c7f2a73ba.
+Il commit che contiene questo aggiornamento identifica la revisione corrente.
+Schema 7. Fase attiva C-bis. Stato parziale, importatore pronto, dati originali da caricare.
+
+### Ispezione workbook
+
+Budget 2025_Marco.xlsx è presente tra i file caricati, ma non nel checkout.
+La lettura disponibile non espone celle. Il trasferimento dei byte per ispezione
+è fallito. NON verificati fogli, intestazioni, colonne, gerarchie e relazioni originali.
+Nessun conto, fornitore o associazione del workbook personale è stato caricato.
+Nessun workbook personale è incluso nel repository.
+Il modello è pertanto flessibile e provvisorio rispetto alla struttura reale.
+Per completare l'ispezione, rendere disponibile il file nella cartella di lavoro
+oppure allegarlo nuovamente. Mantenerlo escluso dai commit.
+
+### Architettura implementata
+
+Archivio ledger_accounts con codici TEXT esatti, descrizioni e origine importato/manuale.
+Relazioni molti-a-molti conto contabile/categoria, fornitore/conto e alias/conto,
+conto abituale opzionale. transactions.ledger_account_id nullable.
+Regole contabili future separate dalle categorie e dalle classificazioni bancarie.
+Creazione manuale protetta nel servizio da importazione precedente e richiesta esplicita.
+La GUI non espone la creazione arbitraria di codici.
+
+Migrazione additiva con backup verificato preesistente. Confronto automatico di
+TUTTI i valori delle tabelle preesistenti, prima del commit e dopo il commit.
+Questo comprende importi/commissioni da cui derivano i saldi, categorie, alias,
+classificazioni e audit. Ogni difformità interrompe l'avvio e indica la copia di sicurezza.
+Il confronto usa una fotografia in memoria, da valutare su archivi molto grandi.
+I servizi restano utilizzabili senza importare Tkinter.
+
+### Funzionalità operative nella GUI
+
+- Scheda Piano dei conti vuota prima dell'importazione. Ricerca, origine,
+  categorie esplicitamente collegate, modifica descrizioni e archiviazione.
+- Import CSV ; / XLSX con nome foglio, prima riga e colonne configurabili.
+  Anteprima differenze, conferma, transazione unica e rifiuto delle anteprime
+  obsolete se le anagrafiche cambiano nel frattempo. Reimport senza conti duplicati.
+  Codici e descrizioni non normalizzati. Codici numerici con formato 0000
+  preservano gli zeri. Formule/formati ambigui nei campi mappati sono bloccati.
+- Le categorie mappate devono già esistere. Nessuna relazione viene dedotta dai nomi.
+  I fornitori vengono importati con nome esatto. Un nome già presente viene
+  riutilizzato senza sovrascrivere la sua anagrafica.
+- Gestione molti-a-molti per fornitori e alias, conto abituale opzionale.
+- Assegnazione automatica soltanto nei nuovi import bancari. Una scelta
+  memorizzata esplicitamente prevale, poi associazione alias esatta e associazioni
+  fornitore. In caso di più candidati senza abituale non viene scelto un conto.
+  Il nuovo movimento resta Proposto con candidati consultabili nei dettagli.
+- Registro con conto bancario distinto dal conto contabile, colonna, ordinamento
+  e filtro contabile, incluso Non assegnato. Assegnazione manuale singola/multipla
+  con conferma, audit e opzione di regola futura. Nessuna assegnazione allo storico
+  causata dall'importazione del piano dei conti.
+- Budget mensile netto con segno per codice, consuntivi e commissioni separati
+  per valuta, riga Non assegnato e categorie esplicite del workbook come riferimenti.
+  Esportazione CSV per codice dal dialogo consuntivo. I budget per categoria
+  precedenti rimangono un prospetto distinto, senza ripartizioni automatiche per codice.
+
+### Collaudo C-bis
+
+11 nuovi test sintetici Windows. Migrazione schema 6→7 e riaperture ripetute,
+confronto esplicito di tutti i dati precedenti, cinque movimenti con commissione
+e saldo esatto 393,10 EUR prima/dopo, alterazione simulata rilevata con rollback.
+Backup pre-migrazione verificato, blocco importazione con anteprima obsoleta,
+CSV/XLSX sintetici con zeri iniziali, import idempotente, gate creazione manuale,
+relazioni molti-a-molti, ambiguità, assegnazione automatica nuova, audit manuale,
+regola futura, storico invariato, Non assegnato e budget per codice.
+GUI Tk reale verificata automaticamente per archivio, assegnazione e filtro.
+La suite finale e le verifiche della baseline sono registrate nella chiusura sotto.
+
+Chiusura automatica C-bis eseguita su Windows con Python 3.12.14 e SQLite 3.53.1.
+Comando python -m unittest discover -s tests -v.
+Esito 64 superati, 0 falliti, 0 saltati in 9,594 secondi, inclusi tutti i 53 test
+precedenti e 11 nuovi. Ripristino e compatibilità WAL superati.
+Collaudo manuale dell'EXE C-bis non eseguito.
+
+### Limiti e prossimo incremento
+
+Ispezione e collaudo del workbook originale pendenti. Non viene dichiarata
+completata la mappatura dei suoi dati, delle gerarchie o dei fornitori.
+L'importatore generale non tenta di indovinare formule o gerarchie.
+Nessuna funzione di creazione manuale in GUI finché non richiesta esplicitamente.
+Export CSV implementato ma collaudo manuale del file esportato pendente.
+Le funzioni parziali A–F elencate più sotto restano successive a C-bis.
+EXE C-bis non prodotto. Collaudo manuale Windows della nuova interfaccia pendente.
+I collaudi manuali 0.2 di migrazione/persistenza/filtri/modifica multipla/audit
+sono dichiarati dall'utente, distinti dai test automatici di questa sessione.
+
+### Compatibilità e ritorno alla versione precedente
+
+Prima dell'avvio, conservare a parte il database da %LOCALAPPDATA%\ContaFlow,
+a programma chiuso. Il database aggiornato non è garantito compatibile con
+il precedente EXE. Per tornare indietro, chiudere tutte le versioni, conservare
+separatamente la cartella dati aggiornata e recuperare la copia pre-migrazione
+%LOCALAPPDATA%\ContaFlow\backups\ContaFlow_pre_migrazione_v6_*.sqlite3.
+Copiare quella copia con il nome originale contaflow.sqlite3 nella cartella dati
+prima di avviare l'EXE precedente. Conservare anche la copia sorgente.
+La funzione di ripristino dell'EXE nuovo aggiorna il backup allo schema nuovo,
+quindi non rappresenta una procedura di downgrade.
+Importi REAL legacy preservati. Nuovi calcoli Decimal e budget contabili in unità
+minori. La migrazione massiva degli importi resta un'attività futura con strategia approvata.
+
+### Avanzamento aggiornato delle 12 fasi
+
+Stime di copertura prodotto, architettura / operatività GUI.
+01 App Windows 90% / 90%, test automatici registro e dialoghi.
+02 Import bancario 85% / 80%, test automatici Revolut/lotti.
+03 Conti e saldi iniziali 40% / 20%, copertura parziale.
+04 Contabilità/trasferimenti 75% / 70%, test automatici collegamenti.
+05 Esportazioni 20% / 20%, CSV contabile operativo, collaudo manuale pendente.
+06 Fornitori/categorie/piano dei conti 90% / 85%, test sintetici C-bis, workbook reale pendente.
+07 Ricorrenze 0% / 0%, pendente.
+08 Budget 80% / 80%, test automatici per categorie e codici.
+09 Dashboard 65% / 65%, test automatici saldi.
+10 AI locale 0% / 0%, non valutata.
+11 Google Sheets 5% / 0%, pendente.
+12 Distribuzione 40% / 10%, compilazione nuovo EXE pendente.
+
+## Stato precedente Alpha 0.2, conservato come riferimento
 
 - Branch codex/contaflow-sviluppo.
 - Ultimo commit precedente al presente incremento: 331e12ba24f75fc2ef8c8e5f036483d19380e2e2.
