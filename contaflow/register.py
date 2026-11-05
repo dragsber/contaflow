@@ -7,9 +7,10 @@ from services.register import STATUSES, money
 
 
 class MovementRegister(ttk.Frame):
-    def __init__(self, parent, service, account, edit):
+    def __init__(self, parent, service, account, edit, reset_account=None):
         super().__init__(parent)
         self.service, self.account = service, account
+        self.reset_account = reset_account
         self.sort, self.descending = "date", True
         self.rows = {}
         self.filters = {name: tk.StringVar() for name in
@@ -53,6 +54,8 @@ class MovementRegister(ttk.Frame):
         ttk.Button(links,text="Assegna sottovoce",command=self.assign_subcategory).pack(side="left")
         self.count = ttk.Label(actions)
         self.count.pack(side="right")
+        self.filter_summary = ttk.Label(self, wraplength=860)
+        self.filter_summary.pack(fill="x")
         headings = (
             ("date", "Data e ora", 145), ("account", "Conto bancario", 145),
             ("description", "Descrizione", 300), ("amount", "Importo", 135),
@@ -167,6 +170,8 @@ class MovementRegister(ttk.Frame):
         ttk.Button(win, text="Conferma collegamento", command=save).pack(pady=12)
 
     def reset(self):
+        if self.reset_account:
+            self.reset_account()
         for var in self.filters.values():
             var.set("")
         self.refresh()
@@ -193,7 +198,11 @@ class MovementRegister(ttk.Frame):
         for name in maps:
             self.boxes[name].configure(values=[""] + list(maps[name]))
         values = {key: var.get() for key, var in self.filters.items()}
+        ignored = []
         for name in maps:
+            if values[name] and values[name] not in maps[name]:
+                ignored.append(name)
+                self.filters[name].set("")
             values[name] = maps[name].get(values[name])
         try:
             rows = self.service.movements(self.account(), **values, sort=self.sort,
@@ -219,8 +228,25 @@ class MovementRegister(ttk.Frame):
                 row["subcategory"] or "Non ripartito",
             ), tags=(state,))
         self.table.selection_set([iid for iid in selected if iid in self.rows])
-        self.count.configure(text=f"{len(rows)} movimenti")
+        total = self.service.store.db.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+        active = self.active_filters()
+        notices = ["Filtri attivi: " + (", ".join(active) or "nessuno")]
+        if ignored:
+            notices.append("Filtri non validi ignorati: " + ", ".join(ignored))
+        if total and not rows:
+            if active:
+                notices.append(f"Il database contiene {total} movimenti ma i filtri attivi li nascondono.")
+            else:
+                notices.append(f"Il database contiene {total} movimenti senza un conto bancario collegato.")
+        self.count.configure(text=f"{len(rows)} di {total} movimenti")
+        self.filter_summary.configure(text="\n".join(notices))
         self.show_detail()
+
+    def active_filters(self):
+        labels = {"search": "Ricerca", "start": "Dal", "end": "Al", "category": "Categoria",
+                  "supplier": "Fornitore", "status": "Stato", "ledger": "Conto contabile"}
+        active = [labels[name] for name, var in self.filters.items() if var.get()]
+        return (["Conto bancario"] if self.account() else []) + active
 
     def show_detail(self, event=None):
         selected = self.table.selection()

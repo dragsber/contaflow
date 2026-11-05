@@ -5,7 +5,7 @@ from tkinter import ttk, filedialog, messagebox, simpledialog
 
 from services.finance import FinanceService, RestoreVerificationError
 from db.migrations import MigrationError
-from contaflow.runtime import log_exception, show_error
+from contaflow.runtime import log_startup_event, show_error
 from contaflow.register import MovementRegister
 from contaflow.budget import BudgetPanel
 from contaflow.ledger import LedgerPanel
@@ -57,11 +57,7 @@ class App(tk.Tk):
         self.subcategory_panel = SubcategoryPanel(self.tabs, self.store)
         self.tabs.add(self.subcategory_panel, text="Sottovoci")
         ttk.Label(self, textvariable=self.status_var, anchor="w", padding=(12, 4)).pack(fill="x")
-        accounts = self.store.accounts()
-        names = [row["name"] for row in accounts]
-        self.account_rows = accounts
-        self.account_box.configure(values=names + ['Tutti i conti'])
-        self.account_var.set(names[0] if names else "")
+        self.account_var.set("Tutti i conti")
         self.refresh_all()
 
     def _build_menu(self):
@@ -70,13 +66,20 @@ class App(tk.Tk):
         database_menu.add_command(label="Crea backup database", command=self.backup_database)
         database_menu.add_command(label="Ripristina backup...", command=self.restore_database)
         menu.add_cascade(label="Database", menu=database_menu)
+        settings = tk.Menu(menu, tearoff=False)
+        settings.add_command(label="Diagnostica", command=self.show_diagnostics)
+        menu.add_cascade(label="Impostazioni", menu=settings)
         self.configure(menu=menu)
 
+    def show_diagnostics(self):
+        from contaflow.diagnostics import show_report
+        show_report(self)
+
     def report_callback_exception(self, exc_type, exc_value, exc_traceback):
-        log_exception(exc_value, "Errore non gestito nella GUI", exc_traceback)
+        log_path = log_startup_event("Lettura/interfaccia", exc_value)
         messagebox.showerror(
             "Errore di ContaFlow",
-            "L'operazione non è riuscita. Il dettaglio tecnico è stato salvato nel log locale.",
+            f"L'operazione non è riuscita. Database: {self.store.store.path}\nLog: {log_path}",
             parent=self,
         )
 
@@ -147,6 +150,10 @@ class App(tk.Tk):
             header, textvariable=self.account_var, state="readonly", width=24
         )
         self.account_box.pack(side="left")
+        self.account_count = ttk.Label(header, padding=(10, 0))
+        self.account_count.pack(side="left")
+        ttk.Button(header, text="Azzera filtri",
+                   command=lambda: self.register.reset()).pack(side="left")
         self.account_box.bind("<<ComboboxSelected>>", lambda event: self.refresh_all())
 
     def _build_dashboard(self):
@@ -171,6 +178,7 @@ class App(tk.Tk):
         self.register = MovementRegister(
             self.movements_tab, self.store, lambda: None if self.account_var.get() == 'Tutti i conti' else self.account_var.get() or None,
             self.edit_movement_classification,
+            self.reset_account_filter,
         )
         self.register.pack(fill="both", expand=True)
         self.table = self.register.table
@@ -326,10 +334,12 @@ class App(tk.Tk):
     def refresh_all(self):
         self.account_rows = self.store.accounts()
         names = [row["name"] for row in self.account_rows]
-        self.account_box.configure(values=names)
+        self.account_box.configure(values=["Tutti i conti"] + names)
         if self.account_var.get() not in names + ['Tutti i conti']:
-            self.account_var.set(names[0] if names else "")
+            self.account_var.set("Tutti i conti")
+            self.status_var.set(self.status_var.get() + " · Filtro conto bancario non valido ignorato.")
         account = None if self.account_var.get() == 'Tutti i conti' else self.account_var.get() or None
+        self.update_account_count(account)
         self._refresh_dashboard(account)
         self._refresh_movements(account)
         self.refresh_suppliers()
@@ -338,6 +348,17 @@ class App(tk.Tk):
         self.ledger_panel.refresh()
         self.subcategory_panel.refresh()
 
+    def reset_account_filter(self):
+        self.account_var.set("Tutti i conti")
+        self.update_account_count(None)
+        self._refresh_dashboard(None)
+
+    def update_account_count(self, account):
+        total = len(self.account_rows)
+        visible = int(account in [row["name"] for row in self.account_rows]) if account else total
+        self.account_count.configure(text=f"{visible} di {total} conti bancari"
+                                    + (" (filtro conto)" if account else ""))
+
     def _refresh_dashboard(self, account):
         rows = self.store.summary(account)
         for child in self.cards.winfo_children():
@@ -345,7 +366,12 @@ class App(tk.Tk):
         if not rows:
             self.account_heading.config(text="Nessun conto configurato")
             return
-        row = rows[0]
+        for row in rows:
+            self._render_account_summary(row)
+        if account is None:
+            self.account_heading.config(text=f"{len(rows)} conti bancari")
+
+    def _render_account_summary(self, row):
         currency = row["currency"]
         if row["opening_balance_confirmed"]:
             balance_label = (
@@ -360,11 +386,11 @@ class App(tk.Tk):
         self.account_heading.config(text=f"{row['name']} · {currency} · {balance_label}")
         ttk.Label(
             self.cards,
-            text=f"Entrate {row['income']:.2f} {currency}     "
+            text=f"{row['name']} — {balance_label}\nEntrate {row['income']:.2f} {currency}     "
                  f"Uscite {row['expenses']:.2f} {currency}     "
                  f"Commissioni {row['fees']:.2f} {currency}",
             padding=14, relief="groove",
-        ).pack(side="left")
+        ).pack(anchor="w", fill="x")
 
     def _refresh_movements(self, account):
         self.register.refresh()
@@ -627,17 +653,23 @@ class App(tk.Tk):
 
 
 def main():
+    service = None
     try:
-        App().mainloop()
+        service = FinanceService()
+        App(service).mainloop()
     except Exception as error:
-        log_path = log_exception(error, "Avvio applicazione")
+        log_path = log_startup_event("Avvio applicazione", error)
         root = tk.Tk()
         root.withdraw()
         messagebox.showerror(
             "ContaFlow non avviato",
             "L'applicazione non è riuscita ad avviarsi. "
             + (f"\n{error}\n" if isinstance(error, MigrationError) else "")
+            + (f"\nDatabase: {service.store.path}\n" if service else "")
             + f"Il dettaglio è nel log locale:\n{log_path}",
             parent=root,
         )
         root.destroy()
+    finally:
+        if service is not None:
+            service.store.db.close()

@@ -76,6 +76,7 @@ class ImportWorkflowTests(unittest.TestCase):
         from contaflow.app import App
         app = App(self.service)
         app.withdraw()
+        app.account_var.set("Revolut EUR")
         self.addCleanup(app.destroy)
         with patch("contaflow.app.filedialog.askopenfilename", return_value=str(self.path)):
             with patch("contaflow.app.messagebox.askyesno", return_value=False) as confirmation:

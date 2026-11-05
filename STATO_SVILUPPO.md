@@ -2,6 +2,33 @@
 
 ## Budget per categorie e sottovoci
 
+### Avvio e registro dopo l'aggiornamento — schema 8
+
+Base dell'intervento: `ee76f4a7f3439ff08a55e2550e33ece101fda477`.
+Segnalazione Windows: movimenti e conti assenti. Riprodotto il registro vuoto
+su un archivio sintetico v7 con cinque movimenti sul secondo conto. Il servizio
+li restituiva, ma la GUI selezionava il primo conto all'avvio. Le liste dei conti
+erano popolate, quindi la segnalazione completa resta da verificare sul PC
+dell'utente tramite rapporto diagnostico. Le date iniziali non filtravano,
+i filtri non erano persistiti e i riferimenti facoltativi usavano LEFT JOIN.
+
+Avvio con tutti i conti, contatori visualizzati/totali, filtri attivi e azzeramento.
+Impostazioni → Diagnostica mostra in anteprima un rapporto esportabile in TXT
+con percorso effettivo, metadati, conteggi e risultati SQLite. Gli eventi recenti
+provengono da un log dedicato che registra categorie di errore, senza messaggi
+o traceback contenenti dati. Il file legacy di log non viene esportato.
+
+Apertura esplicita del percorso esistente senza creazione implicita, validazione
+di schema e integrità prima delle modifiche, arresto con percorso e causa per
+archivio inatteso. Una cartella alternativa mancante non crea un archivio
+se il database predefinito esiste. Migrazione verificata anche con WAL attivo.
+
+Test Windows con Python 3.12: `python -m unittest discover -s tests -q`,
+86 superati. I test della selezione iniziale e del database corrotto fallivano
+sulla base precedente. Verificati anche due avvii, saldo di 393,10 EUR, filtri
+invalidi, export dopo anteprima, backup e migrazione fallita su dati sintetici.
+Build EXE e riscontro della segnalazione originale tramite rapporto da fare.
+
 Branch codex/contaflow-sviluppo, commit precedente 39afeca9f09c3cebea9f7b860daa07f2db4c93bd.
 Il commit che contiene questa sezione è la versione corrente. Schema 8.
 
