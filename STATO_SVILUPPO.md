@@ -2,6 +2,16 @@
 
 ## Budget per categorie e sottovoci
 
+### Verifica dei backup dall'app
+
+L'utente ha recuperato i cinque movimenti da una copia del backup pre-migrazione
+v5. L'archivio che la nuova installazione apriva conteneva zero movimenti.
+La Dashboard ora mostra il percorso dell'archivio vuoto e offre «Verifica un
+backup…», disponibile anche nel menu Database. L'anteprima apre il file in sola
+lettura e indica percorso, schema, conti e movimenti. Gli stessi conteggi sono
+mostrati prima della conferma di ripristino. La procedura di ripristino e il suo
+backup di sicurezza restano quelli esistenti. Verifiche con archivi sintetici.
+
 ### Avvio e registro dopo l'aggiornamento — schema 8
 
 Base dell'intervento: `ee76f4a7f3439ff08a55e2550e33ece101fda477`.

@@ -64,6 +64,7 @@ class App(tk.Tk):
         menu = tk.Menu(self)
         database_menu = tk.Menu(menu, tearoff=False)
         database_menu.add_command(label="Crea backup database", command=self.backup_database)
+        database_menu.add_command(label="Verifica un backup…", command=self.verify_backup)
         database_menu.add_command(label="Ripristina backup...", command=self.restore_database)
         menu.add_cascade(label="Database", menu=database_menu)
         settings = tk.Menu(menu, tearoff=False)
@@ -92,16 +93,40 @@ class App(tk.Tk):
             show_error(self, "Backup non completato",
                        "Non è stato possibile creare il backup.", error, "Creazione backup")
 
-    def restore_database(self):
-        path = filedialog.askopenfilename(
+    def _pick_backup(self):
+        return filedialog.askopenfilename(
             title="Seleziona backup ContaFlow",
             filetypes=[("Database SQLite", "*.sqlite3 *.sqlite *.db"), ("Tutti i file", "*.*")],
+            parent=self,
         )
+
+    def verify_backup(self):
+        path = self._pick_backup()
+        if path:
+            summary = self._backup_preview(path)
+            if summary is not None:
+                messagebox.showinfo("Contenuto del backup", summary, parent=self)
+
+    def _backup_preview(self, path):
+        from contaflow.diagnostics import backup_summary
+
+        try:
+            return backup_summary(path)
+        except (OSError, sqlite3.Error, ValueError) as error:
+            reason = str(error) if isinstance(error, ValueError) else "Impossibile leggere il file SQLite."
+            messagebox.showerror("Backup non leggibile", reason, parent=self)
+            return None
+
+    def restore_database(self):
+        path = self._pick_backup()
         if not path:
+            return
+        summary = self._backup_preview(path)
+        if summary is None:
             return
         if not messagebox.askyesno(
             "Conferma ripristino",
-            "Il ripristino sostituirà i dati attualmente caricati. "
+            f"{summary}\n\nIl ripristino sostituirà i dati attualmente caricati. "
             "Prima verrà creato un backup automatico.",
             parent=self,
         ):
@@ -165,6 +190,11 @@ class App(tk.Tk):
             self.dashboard_tab, font=("Segoe UI", 12, "bold"), padding=8
         )
         self.account_heading.pack(anchor="w", fill="x")
+        self.empty_archive = ttk.Frame(self.dashboard_tab)
+        ttk.Label(self.empty_archive, wraplength=850,
+                  text=f"Questo archivio non contiene movimenti.\n{self.store.store.path}").pack(anchor="w")
+        ttk.Button(self.empty_archive, text="Verifica un backup…",
+                   command=self.verify_backup).pack(anchor="w", pady=5)
         self.cards = ttk.Frame(self.dashboard_tab, padding=(0, 12))
         self.cards.pack(fill="x")
         ttk.Label(
@@ -360,6 +390,10 @@ class App(tk.Tk):
                                     + (" (filtro conto)" if account else ""))
 
     def _refresh_dashboard(self, account):
+        if self.store.store.db.execute("SELECT 1 FROM transactions LIMIT 1").fetchone() is None:
+            self.empty_archive.pack(fill="x", before=self.cards)
+        else:
+            self.empty_archive.pack_forget()
         rows = self.store.summary(account)
         for child in self.cards.winfo_children():
             child.destroy()

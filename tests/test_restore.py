@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from contaflow.app import App
+from contaflow.diagnostics import backup_summary
 from contaflow.store import Store
 from services.finance import FinanceService, RestoreVerificationError
 
@@ -156,9 +157,39 @@ class RestoreTests(unittest.TestCase):
         dialogs.askyesno.return_value = True
         return dialogs
 
+    def test_preview_counts_legacy_backup_without_modifying_it(self):
+        with closing(sqlite3.connect(self.source)) as db, db:
+            db.execute("UPDATE schema_version SET version=5")
+            db.execute(
+                "INSERT INTO transactions(account_id,occurred_at,description,amount,currency,kind,status,source_json) "
+                "VALUES (1,'2026-01-01','Privato sintetico',-7,'EUR','CARD_PAYMENT','COMPLETATO','{}')"
+            )
+        before = self.source.read_bytes()
+        summary = backup_summary(self.source)
+        self.assertIn("Movimenti: 1", summary)
+        self.assertIn("Schema: 5", summary)
+        self.assertNotIn("Privato sintetico", summary)
+        self.assertEqual(self.source.read_bytes(), before)
+        self.assertEqual(self.active.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 0)
+
+    def test_unreadable_backup_is_rejected_before_confirmation(self):
+        self.source.write_bytes(b"corrupt synthetic backup")
+        dialogs = self.gui_dialogs()
+        app = self.mock_restore_app()
+        App.restore_database(app)
+        dialogs.showerror.assert_called_once()
+        dialogs.askyesno.assert_not_called()
+        self.assertEqual(self.categories(self.active), ["Attiva"])
+
+    def mock_restore_app(self):
+        app = Mock(store=self.service)
+        app._pick_backup.side_effect = lambda: App._pick_backup(app)
+        app._backup_preview.side_effect = lambda path: App._backup_preview(app, path)
+        return app
+
     def test_gui_refresh_failure_reports_success_with_warning(self):
         dialogs = self.gui_dialogs()
-        app = Mock(store=self.service)
+        app = self.mock_restore_app()
         app.anomalies.get_children.return_value = ()
         app.refresh_all.side_effect = tk.TclError("Widget non disponibile")
         with patch("contaflow.app.show_error") as error:
@@ -170,7 +201,7 @@ class RestoreTests(unittest.TestCase):
 
     def test_gui_database_read_failure_is_critical(self):
         dialogs = self.gui_dialogs()
-        app = Mock(store=self.service)
+        app = self.mock_restore_app()
         app.anomalies.get_children.return_value = ()
         app.refresh_all.side_effect = sqlite3.DatabaseError("Lettura fallita")
         with patch("contaflow.app.show_error") as error:
@@ -189,6 +220,7 @@ class RestoreTests(unittest.TestCase):
             raise
         app.withdraw()
         self.addCleanup(app.destroy)
+        self.assertEqual(app.empty_archive.winfo_manager(), "pack")
         with closing(sqlite3.connect(self.source)) as db:
             db.execute("UPDATE accounts SET name='Conto ripristinato' WHERE id=1")
             db.execute("INSERT INTO suppliers(name) VALUES ('Fornitore test')")
@@ -204,6 +236,8 @@ class RestoreTests(unittest.TestCase):
         app.anomalies.insert("", "end", values=("1", "EUR", "2", "3"))
         app.restore_database()
         dialogs.showinfo.assert_called_once()
+        self.assertIn("Movimenti: 1", dialogs.askyesno.call_args.args[1])
+        self.assertEqual(app.empty_archive.winfo_manager(), "")
         self.assertIn(app.account_var.get(), app.account_box["values"])
         self.assertEqual(app.account_var.get(), "Tutti i conti")
         self.assertIn("Conto ripristinato", app.account_box["values"])

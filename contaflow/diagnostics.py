@@ -1,15 +1,34 @@
 import os
 import re
+import sqlite3
 import sys
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
 from contaflow.store import data_directory, data_path, default_data_path
-from db.migrations import LATEST_SCHEMA_VERSION
+from db.migrations import LATEST_SCHEMA_VERSION, schema_version
 from services.register import STATUSES
 
 
 BUILD = "Alpha 0.2 — diagnostica schema 8 / build 1"
+
+
+def backup_summary(filename):
+    path = Path(filename).resolve()
+    with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as db:
+        db.execute("BEGIN")
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if not {"accounts", "categories", "transactions"} <= tables:
+            raise ValueError("Il file selezionato non è un database ContaFlow.")
+        version = schema_version(db)
+        if type(version) is not int or not 0 <= version <= LATEST_SCHEMA_VERSION:
+            raise ValueError("Versione del backup non supportata.")
+        if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise ValueError("Il backup non supera il controllo di integrità.")
+        movements = db.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+        accounts = db.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
+    return f"File: {path}\nMovimenti: {movements}\nConti bancari: {accounts}\nSchema: {version}"
 
 
 def report(store, active_filters=()):
