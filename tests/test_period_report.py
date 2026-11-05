@@ -17,8 +17,9 @@ class PeriodReportTests(unittest.TestCase):
         self.ledger_id = self.service.ledger.accounts()[0]["id"]
 
     def test_partial_months_leap_year_and_inclusive_dates(self):
-        self.service.ledger.save_budget(2024, 1, self.ledger_id, "EUR", "-310")
-        self.service.ledger.save_budget(2024, 2, self.ledger_id, "EUR", "-290")
+        with self.db:
+            self.db.execute("INSERT INTO ledger_budgets VALUES(2024,1,?,'EUR',-31000)",(self.ledger_id,))
+            self.db.execute("INSERT INTO ledger_budgets VALUES(2024,2,?,'EUR',-29000)",(self.ledger_id,))
         with self.db:
             for when, amount in (("2024-01-14",-100),("2024-01-15",-10),
                                  ("2024-02-15",-20),("2024-02-16",-100)):
@@ -33,8 +34,9 @@ class PeriodReportTests(unittest.TestCase):
         self.assertEqual(row["missing_months"], 0)
 
     def test_missing_budget_and_separate_currencies(self):
-        self.service.ledger.save_budget(2026,1,self.ledger_id,"EUR","-31")
-        self.service.ledger.save_budget(2026,1,self.ledger_id,"CHF","-62")
+        with self.db:
+            self.db.execute("INSERT INTO ledger_budgets VALUES(2026,1,?,'EUR',-3100)",(self.ledger_id,))
+            self.db.execute("INSERT INTO ledger_budgets VALUES(2026,1,?,'CHF',-6200)",(self.ledger_id,))
         rows = self.service.ledger.period_report("2026-01-16","2026-02-02")
         self.assertEqual({r["currency"]:r["budget"] for r in rows},
                          {"EUR":Decimal("-16.00"),"CHF":Decimal("-32.00")})

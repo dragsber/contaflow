@@ -13,6 +13,9 @@ def period(year, month):
 
 
 def save_budget(db, year, month, category_id, currency, amount):
+    from db.migrations import schema_version
+    if schema_version(db) >= 8:
+        raise ValueError("I budget per categoria sono storici. Imposta il budget sulle sottovoci.")
     period(year, month)
     currency = currency.strip().upper()
     if currency not in ("EUR", "CHF"):

@@ -19,6 +19,7 @@ def movements(db, account=None, *, search="", start="", end="", category=None,
               supplier=None, status="", sort="date", descending=True, ledger=None):
     ordering = {
         "ledger": "l.code",
+        "subcategory": "sub.name",
         "date": "t.occurred_at", "description": "t.description COLLATE NOCASE",
         "amount": "t.amount", "fee": "t.fee", "currency": "t.currency",
         "kind": "t.kind", "classification": "t.classification_status",
@@ -60,11 +61,13 @@ def movements(db, account=None, *, search="", start="", end="", category=None,
         conditions.append("t.classification_status=?")
         args.append(status)
     sql = (
-        "SELECT t.*,a.name AS account,s.name AS supplier,c.name AS category,l.code AS ledger_code "
+        "SELECT t.*,a.name AS account,s.name AS supplier,c.name AS category,l.code AS ledger_code,sub.name AS subcategory,proposal.code AS proposed_ledger_code "
         "FROM transactions t JOIN accounts a ON a.id=t.account_id "
         "LEFT JOIN suppliers s ON s.id=t.supplier_id "
         "LEFT JOIN categories c ON c.id=t.category_id "
-        "LEFT JOIN ledger_accounts l ON l.id=t.ledger_account_id"
+        "LEFT JOIN ledger_accounts l ON l.id=t.ledger_account_id "
+        "LEFT JOIN subcategories sub ON sub.id=t.subcategory_id "
+        "LEFT JOIN ledger_accounts proposal ON proposal.id=sub.ledger_account_id AND proposal.archived=0"
     )
     if conditions:
         sql += " WHERE " + " AND ".join(conditions)

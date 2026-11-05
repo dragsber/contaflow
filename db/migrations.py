@@ -3,7 +3,7 @@ from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
-LATEST_SCHEMA_VERSION = 7
+LATEST_SCHEMA_VERSION = 8
 
 
 def _columns(connection, table):
@@ -189,6 +189,18 @@ def _migration_7(connection):
     _add_column(connection, 'transactions', 'ledger_account_id INTEGER REFERENCES ledger_accounts(id)')
 
 
+def _migration_8(connection):
+    connection.execute("CREATE TABLE subcategories (id INTEGER PRIMARY KEY, category_id INTEGER NOT NULL REFERENCES categories(id), name TEXT NOT NULL, generic INTEGER NOT NULL DEFAULT 0 CHECK(generic IN (0,1)), archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0,1)), ledger_account_id INTEGER REFERENCES ledger_accounts(id))")
+    connection.execute("CREATE UNIQUE INDEX one_generic_subcategory ON subcategories(category_id) WHERE generic=1")
+    connection.execute("CREATE TABLE subcategory_budgets (subcategory_id INTEGER NOT NULL REFERENCES subcategories(id), year INTEGER NOT NULL, month INTEGER NOT NULL CHECK(month BETWEEN 1 AND 12), currency TEXT NOT NULL, amount_minor INTEGER NOT NULL, PRIMARY KEY(subcategory_id,year,month,currency))")
+    connection.execute("CREATE TABLE supplier_subcategories (supplier_id INTEGER NOT NULL REFERENCES suppliers(id), subcategory_id INTEGER NOT NULL REFERENCES subcategories(id), habitual INTEGER NOT NULL DEFAULT 0 CHECK(habitual IN (0,1)), PRIMARY KEY(supplier_id,subcategory_id))")
+    connection.execute("CREATE UNIQUE INDEX one_habitual_subcategory ON supplier_subcategories(supplier_id) WHERE habitual=1")
+    connection.execute("CREATE TABLE alias_subcategories (alias_id INTEGER NOT NULL REFERENCES supplier_aliases(id), subcategory_id INTEGER NOT NULL REFERENCES subcategories(id), PRIMARY KEY(alias_id,subcategory_id))")
+    connection.execute("CREATE TABLE subcategory_rules (description TEXT PRIMARY KEY, subcategory_id INTEGER NOT NULL REFERENCES subcategories(id))")
+    connection.execute("CREATE TABLE legacy_allocations (category_id INTEGER NOT NULL REFERENCES categories(id), year INTEGER NOT NULL, month INTEGER NOT NULL, currency TEXT NOT NULL, PRIMARY KEY(category_id,year,month,currency))")
+    _add_column(connection, 'transactions', 'subcategory_id INTEGER REFERENCES subcategories(id)')
+
+
 def _preserved_data(connection):
     """Compare all pre-existing values, including monetary inputs, without float sums."""
     result = {}
@@ -216,7 +228,7 @@ def migrate(connection: sqlite3.Connection, *, new_database=False) -> None:
     version = schema_version(connection)
     if version > LATEST_SCHEMA_VERSION:
         raise MigrationError("Database creato con una versione più recente di ContaFlow")
-    migrations = {1: lambda db: None, 2: _migration_2, 3: _migration_3, 4: _migration_4, 5: _migration_5, 6: _migration_6, 7: _migration_7}
+    migrations = {1: lambda db: None, 2: _migration_2, 3: _migration_3, 4: _migration_4, 5: _migration_5, 6: _migration_6, 7: _migration_7, 8: _migration_8}
     for target_version in range(version + 1, LATEST_SCHEMA_VERSION + 1):
         safety = None if new_database else backup_before_upgrade(connection)
         previous = schema_version(connection)

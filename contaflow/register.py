@@ -50,6 +50,7 @@ class MovementRegister(ttk.Frame):
                    command=self.link_selected).pack(side="left")
         ttk.Button(links, text="Scollega", command=self.unlink_selected).pack(side="left")
         ttk.Button(links,text="Assegna conto contabile",command=self.assign_ledger).pack(side="left",padx=8)
+        ttk.Button(links,text="Assegna sottovoce",command=self.assign_subcategory).pack(side="left")
         self.count = ttk.Label(actions)
         self.count.pack(side="right")
         headings = (
@@ -59,6 +60,7 @@ class MovementRegister(ttk.Frame):
             ("kind", "Tipo bancario", 125), ("classification", "Stato", 210),
             ("supplier", "Fornitore", 160), ("category", "Categoria", 160),
             ("ledger", "Conto contabile", 170),
+            ("subcategory", "Sottovoce", 170),
         )
         area = ttk.Frame(self)
         area.pack(fill="both", expand=True)
@@ -87,6 +89,39 @@ class MovementRegister(ttk.Frame):
         self.detail = tk.Text(self, height=5, wrap="word", state="disabled")
         self.detail.pack(fill="x")
         self.table.bind("<<TreeviewSelect>>", self.show_detail)
+
+    def assign_subcategory(self):
+        from services.subcategories import assign
+        selected = [int(value) for value in self.table.selection()]
+        if not selected:
+            messagebox.showinfo("Sottovoce","Seleziona i movimenti.",parent=self)
+            return
+        categories = {self.rows[str(identifier)]["category_id"] for identifier in selected}
+        if len(categories) != 1 or None in categories:
+            messagebox.showerror("Sottovoce","Seleziona movimenti con la stessa categoria.",parent=self)
+            return
+        rows = self.service.store.db.execute(
+            "SELECT id,name FROM subcategories WHERE category_id=? AND archived=0 ORDER BY name",
+            (next(iter(categories)),),
+        ).fetchall()
+        win = tk.Toplevel(self)
+        win.title("Assegna sottovoce")
+        choices = {f"{r['id']} · {r['name']}":r["id"] for r in rows}
+        value = tk.StringVar(value="Non ripartito")
+        ttk.Combobox(win,textvariable=value,values=["Non ripartito"]+list(choices),state="readonly",width=55).pack(padx=12,pady=12)
+        remember = tk.BooleanVar()
+        ttk.Checkbutton(win,text="Memorizza la scelta per i futuri movimenti compatibili",variable=remember).pack()
+        def save():
+            if not messagebox.askyesno("Conferma",f"Verranno modificati {len(selected)} movimenti. Procedere?",parent=win):
+                return
+            try:
+                assign(self.service.store.db,selected,choices.get(value.get()),remember=remember.get(),
+                       normalize=self.service.store.normalize_description)
+                win.destroy()
+                self.winfo_toplevel().refresh_all()
+            except Exception as error:
+                messagebox.showerror("Assegnazione non riuscita",str(error),parent=win)
+        ttk.Button(win,text="Salva",command=save).pack(pady=8)
 
     def assign_ledger(self):
         from contaflow.ledger import assign_selected
@@ -181,6 +216,7 @@ class MovementRegister(ttk.Frame):
                 money(row["fee"], row["currency"]), row["currency"], row["kind"],
                 STATUSES.get(state, state), row["supplier"] or "", row["category"] or "",
                 row["ledger_code"] if row["ledger_code"] is not None else "Non assegnato",
+                row["subcategory"] or "Non ripartito",
             ), tags=(state,))
         self.table.selection_set([iid for iid in selected if iid in self.rows])
         self.count.configure(text=f"{len(rows)} movimenti")
@@ -194,6 +230,7 @@ class MovementRegister(ttk.Frame):
             details = (
                 ("Identificativo", row["id"]), ("Conto bancario", row["account"]),
                 ("Conto contabile",row["ledger_code"] if row["ledger_code"] is not None else "Non assegnato"),
+                ("Sottovoce",row["subcategory"] or "Non ripartito"),
                 ("Data e ora", row["occurred_at"]), ("Descrizione", row["description"]),
                 ("Importo", money(row["amount"],row["currency"])),
                 ("Commissione", money(row["fee"],row["currency"])),
@@ -203,10 +240,18 @@ class MovementRegister(ttk.Frame):
                 ("Lotto", row["importation_id"]),
             )
             text = "\n".join(f"{label}: {value}" for label, value in details)
+            if row["ledger_account_id"] is None and row["proposed_ledger_code"]:
+                text += "\nConto contabile proposto dalla sottovoce: " + row["proposed_ledger_code"]
             choices = self.service.ledger.candidates(row["description"],row["supplier_id"])
             if row["ledger_account_id"] is None and choices:
                 candidates = [r["code"] for r in self.service.ledger.accounts() if r["id"] in choices]
                 text += "\nConti contabili candidati (scelta richiesta): " + ", ".join(candidates)
+            if row["subcategory_id"] is None:
+                from services.subcategories import candidates as subcategory_candidates
+                choices = subcategory_candidates(self.service.store,row["description"],row["supplier_id"])
+                if choices:
+                    available = self.service.store.db.execute("SELECT id,name FROM subcategories WHERE archived=0").fetchall()
+                    text += "\nSottovoci candidate (scelta richiesta): " + ", ".join(r["name"] for r in available if r["id"] in choices)
             text += "\nDati bancari originali\n" + json.dumps(
                 json.loads(row["source_json"]), ensure_ascii=False, indent=2)
         elif selected:

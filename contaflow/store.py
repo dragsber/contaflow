@@ -190,6 +190,19 @@ class Store:
                 elif len(choices) > 1 and classification["status"] in ("classificato","proposto","in_attesa"):
                     self.db.execute("UPDATE transactions SET classification_status='proposto' WHERE id=?", (next_id-1,))
                     classification["status"] = "proposto"
+                from services.subcategories import candidates as subcategory_candidates
+                sub_choices = subcategory_candidates(self, row["Descrizione"], classification["supplier_id"])
+                if len(sub_choices) == 1:
+                    candidate = self.db.execute("SELECT category_id FROM subcategories WHERE id=?", (sub_choices[0],)).fetchone()
+                    if classification["category_id"] is None or classification["category_id"] == candidate[0]:
+                        self.db.execute("UPDATE transactions SET category_id=?,subcategory_id=? WHERE id=?",
+                                        (candidate[0],sub_choices[0],next_id-1))
+                    elif classification["status"] in ("classificato","proposto","in_attesa"):
+                        self.db.execute("UPDATE transactions SET classification_status='proposto' WHERE id=?",(next_id-1,))
+                        classification["status"] = "proposto"
+                elif len(sub_choices) > 1 and classification["status"] in ("classificato","proposto","in_attesa"):
+                    self.db.execute("UPDATE transactions SET classification_status='proposto' WHERE id=?",(next_id-1,))
+                    classification["status"] = "proposto"
                 result["imported"] += 1
                 result[{"classificato":"classified", "proposto":"proposed", "in_attesa":"pending", "trasferimento":"classified"}[classification["status"]]] += 1
             self.db.execute("UPDATE importations SET result='completed' WHERE id=?", (batch,))

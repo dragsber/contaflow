@@ -1,4 +1,101 @@
-# ContaFlow · Alpha 0.2 C-bis — build intermedia
+# ContaFlow · Alpha 0.2 — budget sottovoci, build intermedia
+
+## Budget per categorie e sottovoci
+
+Branch codex/contaflow-sviluppo, commit precedente 39afeca9f09c3cebea9f7b860daa07f2db4c93bd.
+Il commit che contiene questa sezione è la versione corrente. Schema 8.
+
+### Architettura
+
+Gerarchia categoria → sottovoce → movimento. Codice contabile importato opzionale
+sulla sottovoce, conto già assegnato al movimento preservato. Migrazione additiva
+e versionata con backup verificato e confronto dei dati precedenti.
+Budget nuovi soltanto per sottovoce, anno, mese e valuta in centesimi interi con
+segno contabile. Budget categorie legacy restano conservati e non modificabili
+nei servizi dell'app. I budget precedenti per conto contabile restano leggibili
+in un prospetto storico distinto e non sono ripartiti automaticamente.
+
+I budget legacy di categoria sono memorizzati come importi positivi. Il servizio
+li converte in lettura in uscite negative o entrate positive secondo la categoria,
+senza cambiare i valori originali. Per ogni categoria, mese e valuta, le sottovoci
+hanno priorità. Se assenti si usa il legacy. Se entrambi esistono si visualizza
+un avviso e il legacy informativo. Gli importi zero restano distinti da non impostato.
+Le sottovoci parziali generano un avviso. La ripartizione legacy richiede anteprima,
+conferma, somma esatta e audit, mantenendo intatto il valore storico.
+
+Il periodo include gli estremi. Le quote giornaliere sono calcolate come frazioni
+esatte dei centesimi, con arrotondamento HALF_UP una sola volta nei risultati.
+Questa rappresentazione razionale evita gli arrotondamenti intermedi inevitabili
+con una divisione Decimal periodica, come 1/3. Gli importi effettivi usano Decimal.
+Il subtotale evidenzia le differenze di arrotondamento per budget, consuntivo e
+scostamento. EUR e CHF restano separati, trasferimenti esclusi dal consuntivo.
+
+### Funzionalità operative GUI
+
+Scheda Sottovoci con creazione, modifica, archiviazione, associazione a conto
+contabile importato, budget mensile, fornitori/alias e scelta dell'abituale.
+Assegnazione singola/multipla dal registro con conferma e audit. Eventuale regola
+per le descrizioni future, senza riclassificazione automatica dello storico.
+Se un fornitore ha più candidati e nessuno è abituale, il movimento nuovo è
+proposto e le alternative appaiono nei dettagli. Il registro mostra la sottovoce.
+
+Il cambio categoria su un movimento con sottovoce è bloccato finché l'utente
+non rimuove esplicitamente la sottovoce con conferma. La categoria ha tipo
+non modificabile quando possiede movimenti o budget. Il confronto dal/al mostra
+righe dettaglio, Non ripartito e subtotali, avvisi legacy/parziale, significato
+di scostamento e differenze da arrotondamento. CSV UTF-8 BOM e separatore ;
+con campi testuali iniziali pericolosi neutralizzati e nota sui subtotali.
+
+### Workbook, prove e limiti
+
+Il file Budget 2025_Marco.xlsx è stato successivamente copiato e letto in sola
+lettura. È un esempio del metodo dell'utente, non una fonte obbligatoria di codici.
+Il foglio Budget 2024-2025 contiene CdC, Descrizione, Voce, Categoria, Tipologia.
+Fornitori collega descrizione estratto, nome fornitore e conto. Movimenti contiene
+lo storico. Sono presenti codici duplicati tra righe e gruppi, righe senza conto,
+formule e riferimenti #REF!. Nessun dato personale del file è stato importato.
+
+Test sintetici Windows: migrazione 7→8 e due riaperture, backup integro, errore
+simulato con rollback, cinque movimenti e saldo 393,10 EUR preservati, coerenza
+categoria/sottovoce, storico/audit, riconoscimento ambiguo e regola confermata,
+legacy/conflict/parziale/zero, giorni 28/29/30/31 e intervallo fra anni, quote
+non arrotondate additive, differenza 0,01, segni, valute, CSV e widget Tk.
+La suite completa è stata eseguita al termine dell'incremento.
+Esito finale su Windows con Python 3.12.14: 81 superati, 0 falliti, 0 saltati,
+comando python -m unittest discover -s tests -q. Alcuni test precedenti dei
+budget sono stati aggiornati per verificare la lettura legacy e il blocco dei
+nuovi inserimenti a livello di categoria o conto.
+Sono disponibili periodi predefiniti mese, bimestre, trimestre e anno, oltre al
+dal/al personalizzato. GUI ed export riportano le date effettive del confronto.
+Collaudo manuale GUI, CSV ed EXE versione 8 non eseguiti. Il confronto e i
+budget legacy per conto contabile rimangono consultabili separatamente, non
+trasferiti sulle sottovoci senza una ripartizione esplicita futura.
+La verifica post-migrazione confronta interamente i dati in memoria: valutare
+prestazioni su archivi molto grandi. Gli importi REAL storici restano invariati.
+
+Prima di aprire il nuovo EXE conservare a parte, a programma chiuso, la cartella
+%LOCALAPPDATA%\ContaFlow. Il database migrato non è garantito apribile da un EXE
+precedente. Per tornare indietro conservare separatamente i dati aggiornati, poi
+ripristinare dalla copia pre-migrazione v7 il file contaflow.sqlite3 con tutte le
+versioni chiuse. La copia è in %LOCALAPPDATA%\ContaFlow\backups.
+
+### Avanzamento delle 12 fasi
+
+Stime architettura / operatività GUI, con collaudo automatico parziale dove indicato.
+01 App Windows 90% / 90% — test Tk.
+02 Import bancario 85% / 80% — Revolut sintetico.
+03 Conti e saldi iniziali 40% / 20% — parziale.
+04 Contabilità e trasferimenti 75% / 70% — test automatici.
+05 Esportazioni 55% / 45% — CSV automatico, collaudo manuale pendente.
+06 Fornitori/categorie/piano dei conti 90% / 85% — associazioni testate.
+07 Ricorrenze 0% / 0% — pendente.
+08 Budget 90% / 85% — confronto, legacy, quote e CSV testati.
+09 Dashboard 65% / 65% — saldi testati.
+10 AI locale 0% / 0% — non valutata.
+11 Google Sheets 5% / 0% — pendente.
+12 Distribuzione 40% / 10% — nuovo EXE da compilare.
+
+## Stato precedente C-bis, conservato come riferimento
 
 ## Confronto budget per intervallo
 

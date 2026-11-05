@@ -45,6 +45,8 @@ def update_movements(store, movement_ids, changes, remember=False):
             row = db.execute("SELECT * FROM transactions WHERE id=?", (movement_id,)).fetchone()
             if row is None:
                 raise ValueError("Movimento non trovato")
+            if "category_id" in changes and row["subcategory_id"] is not None and changes["category_id"] != row["category_id"]:
+                raise ValueError("La categoria ha una sottovoce associata. Rimuovi prima la sottovoce con conferma.")
             transfer = db.execute(
                 "SELECT 1 FROM transfers WHERE movement_out_id=? OR movement_in_id=?", (movement_id, movement_id)
             ).fetchone()

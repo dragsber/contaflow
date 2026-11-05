@@ -26,8 +26,9 @@ class BudgetTests(unittest.TestCase):
             )
 
     def test_exact_budget_and_currency_separation(self):
-        self.service.save_budget(2026, 1, self.category, "EUR", "100,10")
-        self.service.save_budget(2026, 1, self.category, "CHF", "80,20")
+        with self.db:
+            self.db.execute("INSERT INTO budgets(year,month,category_id,currency,amount,amount_minor) VALUES(2026,1,?,'EUR',100.10,10010)",(self.category,))
+            self.db.execute("INSERT INTO budgets(year,month,category_id,currency,amount,amount_minor) VALUES(2026,1,?,'CHF',80.20,8020)",(self.category,))
         self.movement(-10.1)
         self.movement(-20.2, "CHF")
         self.movement(-500, state="trasferimento")
@@ -39,7 +40,8 @@ class BudgetTests(unittest.TestCase):
         self.assertEqual(by_currency["EUR"]["actual"], Decimal("10.1"))
         self.assertEqual(totals["CHF"]["expenses"], Decimal("20.2"))
         self.assertEqual(self.db.execute("SELECT amount_minor FROM budgets WHERE currency='EUR'").fetchone()[0], 10010)
-        self.service.save_budget(2026, 1, self.category, "EUR", "110")
+        with self.assertRaises(ValueError):
+            self.service.save_budget(2026, 1, self.category, "EUR", "110")
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM budgets").fetchone()[0], 2)
         with self.assertRaises(ValueError):
             self.service.save_budget(2026, 1, self.category, "EUR", "1,001")
@@ -51,9 +53,9 @@ class BudgetTests(unittest.TestCase):
         app.withdraw()
         self.addCleanup(app.destroy)
         panel = app.budget
-        panel.category.set(next(iter(panel.categories)))
-        panel.amount.set("123,45")
-        panel.save()
+        with self.db:
+            self.db.execute("INSERT INTO budgets(year,month,category_id,currency,amount,amount_minor) VALUES(2026,1,?,'EUR',123.45,12345)",(self.category,))
+        panel.refresh()
         item, = panel.table.get_children()
         self.assertEqual(panel.table.set(item, "planned"), "123,45 €")
         with closing(Store(self.path).db) as reopened:

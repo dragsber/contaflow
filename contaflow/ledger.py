@@ -47,8 +47,7 @@ class LedgerPanel(ttk.Frame):
             ttk.Label(report_controls,text=label).pack(side="left")
             ttk.Entry(report_controls,textvariable=var,width=7).pack(side="left",padx=4)
         ttk.Button(report_controls,text="Consuntivo / budget per codice",command=self.report).pack(side="left",padx=6)
-        ttk.Button(report_controls,text="Salva budget conto selezionato",command=self.save_budget).pack(side="left")
-        ttk.Button(report_controls,text="Confronto dal / al",command=self.period_report).pack(side="left",padx=6)
+        ttk.Button(report_controls,text="Confronto conti precedente",command=self.period_report).pack(side="left",padx=6)
 
     def refresh(self):
         self.table.delete(*self.table.get_children())

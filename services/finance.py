@@ -68,8 +68,7 @@ class FinanceService:
         return enriched
 
     def save_budget(self, year, month, category_id, currency, amount):
-        from services.budget import save_budget
-        return save_budget(self.store.db, year, month, category_id, currency, amount)
+        raise ValueError("I budget per categoria sono storici. Imposta il budget sulle sottovoci.")
 
     def budget_report(self, year, month):
         from services.budget import budget_report
@@ -147,11 +146,38 @@ class FinanceService:
             raise ValueError("Nome categoria obbligatorio")
         if category_type not in {"entrata", "uscita", "trasferimento"}:
             raise ValueError("Tipo categoria non valido")
+        if self.store.db.in_transaction:
+            raise ValueError("Completa la transazione in corso")
         with self.store.db:
+            self.store.db.execute("BEGIN IMMEDIATE")
+            old = self.store.db.execute(
+                "SELECT name,category_type FROM categories WHERE id=? AND archived=0",(category_id,)
+            ).fetchone()
+            if old is None:
+                raise ValueError("Categoria non disponibile")
+            if old["category_type"] != category_type:
+                used = self.store.db.execute(
+                    "SELECT EXISTS(SELECT 1 FROM transactions WHERE category_id=?) OR "
+                    "EXISTS(SELECT 1 FROM budgets WHERE category_id=?) OR "
+                    "EXISTS(SELECT 1 FROM subcategory_budgets b JOIN subcategories s ON s.id=b.subcategory_id WHERE s.category_id=?)",
+                    (category_id,category_id,category_id),
+                ).fetchone()[0]
+                if category_type == "trasferimento" and self.store.db.execute(
+                    "SELECT 1 FROM subcategories WHERE category_id=? LIMIT 1",(category_id,)
+                ).fetchone():
+                    used = True
+                if used:
+                    raise ValueError("Il tipo non può essere cambiato: la categoria ha movimenti o budget.")
             self.store.db.execute(
                 "UPDATE categories SET name=?,category_type=? WHERE id=? AND archived=0",
                 (name, category_type, category_id),
             )
+            if old["name"] != name or old["category_type"] != category_type:
+                import json
+                self.store.db.execute(
+                    "INSERT INTO audit(field,old_value,new_value) VALUES(?,?,?)",
+                    (f"categoria:{category_id}",json.dumps(dict(old)),json.dumps({"name":name,"category_type":category_type})),
+                )
 
     def archive_category(self, category_id):
         with self.store.db:

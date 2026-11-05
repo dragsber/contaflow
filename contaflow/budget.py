@@ -23,7 +23,7 @@ class BudgetPanel(ttk.Frame):
         self.category_box.grid(row=1, column=3)
         ttk.Label(form, text="Valuta").grid(row=0, column=4, sticky="w")
         ttk.Combobox(form, textvariable=self.currency, values=("EUR","CHF"), state="readonly", width=6).grid(row=1, column=4)
-        ttk.Button(form, text="Salva budget", command=self.save).grid(row=1, column=5, padx=8)
+        ttk.Label(form, text="Budget precedenti in sola lettura").grid(row=1, column=5, padx=8)
         ttk.Button(form, text="Mostra periodo", command=self.refresh).grid(row=1, column=6)
         ttk.Label(self, text="Tutti i conti · Consuntivo per categoria · Valute separate · Scostamento = consuntivo − budget",
                   wraplength=950).pack(fill="x", pady=10)

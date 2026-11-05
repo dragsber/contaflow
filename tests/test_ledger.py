@@ -113,7 +113,10 @@ class LedgerTests(unittest.TestCase):
         first = self.movement(amount=-10)
         self.movement(amount=5)
         self.service.ledger.assign([first],identifier)
-        self.service.ledger.save_budget(2026,1,identifier,"EUR","-20,01")
+        with self.db:
+            self.db.execute("INSERT INTO ledger_budgets VALUES(2026,1,?,'EUR',-2001)",(identifier,))
+        with self.assertRaises(ValueError):
+            self.service.ledger.save_budget(2026,1,identifier,"EUR","-20,01")
         rows = self.service.ledger.report(2026,1)
         self.assertEqual({r["code"] for r in rows},{"0010","Non assegnato"})
         assigned = next(r for r in rows if r["code"]=="0010")

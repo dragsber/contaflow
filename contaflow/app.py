@@ -9,6 +9,7 @@ from contaflow.runtime import log_exception, show_error
 from contaflow.register import MovementRegister
 from contaflow.budget import BudgetPanel
 from contaflow.ledger import LedgerPanel
+from contaflow.subcategories import SubcategoryPanel
 from adapters.google_sheets import GoogleSheetsAdapter
 from adapters.enable_banking import EnableBankingAdapter
 from adapters.local_ai import LocalAIAdapter
@@ -17,7 +18,7 @@ from adapters.local_ai import LocalAIAdapter
 class App(tk.Tk):
     def __init__(self, service=None):
         super().__init__()
-        self.title("ContaFlow · Alpha 0.2 C-bis — build intermedia")
+        self.title("ContaFlow · Alpha 0.2 — budget sottovoci (intermedia)")
         self.geometry("1120x760")
         self.minsize(900, 620)
         self.store = service or FinanceService()
@@ -53,6 +54,8 @@ class App(tk.Tk):
         self.tabs.add(self.budget, text='Budget')
         self.ledger_panel = LedgerPanel(self.tabs, self.store.ledger)
         self.tabs.add(self.ledger_panel, text="Piano dei conti")
+        self.subcategory_panel = SubcategoryPanel(self.tabs, self.store)
+        self.tabs.add(self.subcategory_panel, text="Sottovoci")
         ttk.Label(self, textvariable=self.status_var, anchor="w", padding=(12, 4)).pack(fill="x")
         accounts = self.store.accounts()
         names = [row["name"] for row in accounts]
@@ -333,6 +336,7 @@ class App(tk.Tk):
         self.refresh_categories()
         self.budget.refresh()
         self.ledger_panel.refresh()
+        self.subcategory_panel.refresh()
 
     def _refresh_dashboard(self, account):
         rows = self.store.summary(account)

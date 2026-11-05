@@ -260,19 +260,4 @@ class LedgerService:
         return report(self.db, start, end)
 
     def save_budget(self, year, month, ledger_id, currency, amount):
-        from services.budget import period
-        period(year, month)
-        value = Decimal(str(amount).replace(",","."))
-        if not value.is_finite() or value != value.quantize(Decimal("0.01")):
-            raise ValueError("Importo non valido. Usa massimo due decimali.")
-        if currency not in ("EUR","CHF"):
-            raise ValueError("Valuta non supportata")
-        if not self.db.execute("SELECT 1 FROM ledger_accounts WHERE id=? AND archived=0", (ledger_id,)).fetchone():
-            raise ValueError("Conto contabile non disponibile")
-        with self.db:
-            old = self.db.execute("SELECT amount_minor FROM ledger_budgets WHERE year=? AND month=? AND ledger_id=? AND currency=?",
-                                  (year,month,ledger_id,currency)).fetchone()
-            self.db.execute("INSERT INTO ledger_budgets VALUES(?,?,?,?,?) ON CONFLICT(year,month,ledger_id,currency) DO UPDATE SET amount_minor=excluded.amount_minor",
-                            (year,month,ledger_id,currency,int(value*100)))
-            self.db.execute("INSERT INTO audit(field,old_value,new_value) VALUES(?,?,?)",
-                            (f"budget_conto:{year}:{month}:{ledger_id}:{currency}",str(old[0]) if old else None,str(value)))
+        raise ValueError("I budget per conto contabile sono storici. Imposta il budget sulle sottovoci.")
