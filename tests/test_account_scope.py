@@ -3,10 +3,13 @@ import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
+from decimal import Decimal
 from pathlib import Path
 
 from contaflow.store import Store
 from db.migrations import LATEST_SCHEMA_VERSION
+from services.accounts import archive_account, balance_movements, save_account, save_opening
+from services.finance import FinanceService
 
 
 FIELDS = ['Tipo','Prodotto','Data di inizio','Data di completamento',
@@ -25,6 +28,51 @@ def csv_file(folder, currency='EUR'):
 
 
 class AccountScopeTests(unittest.TestCase):
+    def test_account_rename_preserves_csv_identity_and_archives_without_loss(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store = Store(Path(folder) / "test.db")
+            with closing(store.db) as db:
+                service = FinanceService(store)
+                csv_path = csv_file(folder)
+                service.import_revolut(csv_path, "Revolut EUR")
+                identifier = db.execute("SELECT id FROM accounts WHERE name='Revolut EUR'").fetchone()[0]
+                fingerprint = service.movements()[0]["fingerprint"]
+                save_account(db, "Conto rinominato", "REVOLUT", "EUR", "Istituto sintetico", "", identifier)
+                preview = service.preview_import(csv_path, "Conto rinominato")
+                self.assertEqual(preview.duplicates, 1)
+                self.assertEqual(service.confirm_import(preview)["imported"], 0)
+                archive_account(db, identifier, True)
+                with self.assertRaises(ValueError):
+                    service.preview_import(csv_path, "Conto rinominato")
+                self.assertEqual(service.movements("Conto rinominato")[0]["fingerprint"], fingerprint)
+
+    def test_opening_balance_day_pending_and_fees(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store = Store(Path(folder) / "test.db")
+            with closing(store.db) as db:
+                service = FinanceService(store)
+                identifier = save_account(db, "Conto sintetico", "UNKNOWN", "EUR", "", "")
+                self.assertIsNone(service.summary("Conto sintetico")[0]["bank_balance"])
+                with db:
+                    db.executemany(
+                        "INSERT INTO transactions(account_id,occurred_at,description,amount,fee,currency,kind,status,source_json) "
+                        "VALUES(?,?,'Sintetico',?,?,'EUR','CARD',?,'{}')",
+                        [(identifier, day, amount, fee, status) for day, amount, fee, status in (
+                            ("2026-01-01T23:00", 500, 0.5, "COMPLETATO"),
+                            ("2026-01-02", -100, 0, "COMPLETATO"), ("2026-01-03", -5, 0, "COMPLETATO"),
+                            ("2026-01-04", -1, 0, "COMPLETATO"), ("2026-01-05", -0.4, 0, "COMPLETATO"),
+                            ("2026-01-06", -99, 0, "IN SOSPESO"),
+                        )],
+                    )
+                self.assertEqual(service.summary("Conto sintetico")[0]["balance"], Decimal("393.10"))
+                save_opening(db, identifier, "2026-01-01", "50,00")
+                item = service.summary("Conto sintetico")[0]
+                self.assertEqual(item["balance"], Decimal("393.10"))
+                self.assertEqual(item["bank_balance"], Decimal("-56.40"))
+                self.assertEqual(len(balance_movements(db, identifier, after="2026-01-01")), 4)
+                save_opening(db, identifier, "2026-01-01", "60")
+                self.assertEqual(service.summary("Conto sintetico")[0]["bank_balance"], Decimal("-46.40"))
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM audit WHERE field='saldo_iniziale'").fetchone()[0], 2)
     def test_existing_database_migrates_and_sets_providers(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'legacy.db'

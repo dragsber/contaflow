@@ -20,7 +20,10 @@ class ImportPreview:
 
 
 def preview_import(store, path, account):
-    row = store.db.execute("SELECT currency,provider FROM accounts WHERE name=?", (account,)).fetchone()
+    row = store.db.execute(
+        "SELECT currency,provider,COALESCE(import_identity,name) AS identity "
+        "FROM accounts WHERE name=? AND archived=0", (account,),
+    ).fetchone()
     if row is None or row["provider"] != "REVOLUT":
         raise ValueError("Seleziona un conto Revolut configurato")
     payload = Path(path).read_bytes()
@@ -33,7 +36,7 @@ def preview_import(store, path, account):
             continue
         if item["Valuta"].strip().upper() != row["currency"].upper():
             raise ValueError("Valuta CSV incompatibile con il conto selezionato")
-        identity = fingerprint(account, item)
+        identity = fingerprint(row["identity"], item)
         if identity in seen or store.db.execute(
             "SELECT 1 FROM transactions WHERE fingerprint=?", (identity,)
         ).fetchone():

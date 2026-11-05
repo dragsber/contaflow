@@ -47,7 +47,7 @@ class MovementRegister(ttk.Frame):
         ttk.Button(actions, text="Modifica selezionati", command=edit).pack(side="left", padx=6)
         links = ttk.Frame(self)
         links.pack(fill="x", pady=3)
-        ttk.Button(links, text="Collega due movimenti",
+        ttk.Button(links, text="Collega / cerca candidati",
                    command=self.link_selected).pack(side="left")
         ttk.Button(links, text="Scollega", command=self.unlink_selected).pack(side="left")
         ttk.Button(links,text="Assegna conto contabile",command=self.assign_ledger).pack(side="left",padx=8)
@@ -143,16 +143,49 @@ class MovementRegister(ttk.Frame):
 
     def link_selected(self):
         selected = [self.rows[iid] for iid in self.table.selection()]
+        if len(selected) == 1:
+            self.choose_transfer_candidate(selected[0])
+            return
         if len(selected) != 2:
             messagebox.showwarning("Collegamento", "Seleziona due movimenti, un'uscita e un'entrata.", parent=self)
             return
+        self.confirm_link(selected)
+
+    def choose_transfer_candidate(self, row):
+        from services.transfers import transfer_candidates
+
+        candidates = transfer_candidates(self.service.store.db, row["id"])
+        if not candidates:
+            messagebox.showinfo("Trasferimento", "Nessun candidato nella stessa valuta entro tre giorni.",
+                                parent=self)
+            return
+        window = tk.Toplevel(self)
+        window.title("Possibili contropartite del trasferimento")
+        ttk.Label(window, text="Importo opposto, stessa valuta, conto diverso, entro tre giorni.").pack(padx=10, pady=6)
+        choices = tk.Listbox(window, width=80, exportselection=False)
+        choices.pack(fill="both", expand=True, padx=10, pady=5)
+        for item in candidates:
+            choices.insert("end", f"{item['occurred_at']} · {item['account']} · "
+                           f"{money(item['amount'], item['currency'])} · {item['description']}")
+
+        def choose():
+            picked = choices.curselection()
+            if picked:
+                window.destroy()
+                self.confirm_link([row, candidates[picked[0]]])
+
+        ttk.Button(window, text="Esamina il collegamento", command=choose).pack(pady=8)
+
+    def confirm_link(self, selected):
         selected.sort(key=lambda row: row["amount"])
         outgoing, incoming = selected
         win = tk.Toplevel(self)
         win.title("Collegamento contabile")
         ttk.Label(win, text=(
-            f"Uscita: {outgoing['account']} — {money(outgoing['amount'], outgoing['currency'])}\n"
-            f"Entrata: {incoming['account']} — {money(incoming['amount'], incoming['currency'])}\n"
+            f"Uscita: {outgoing['account']} - {money(outgoing['amount'], outgoing['currency'])}"
+            f" · Commissione {money(outgoing['fee'], outgoing['currency'])}\n"
+            f"Entrata: {incoming['account']} - {money(incoming['amount'], incoming['currency'])}"
+            f" · Commissione {money(incoming['fee'], incoming['currency'])}\n"
             "Saranno collegate le registrazioni esistenti. Commissioni separate."
         ), padding=12).pack()
         kind = tk.StringVar(value="trasferimento")
@@ -276,6 +309,16 @@ class MovementRegister(ttk.Frame):
             if row["supplier_id"] is not None:
                 reason = supplier_reasons.get(row["classification_origin"], "origine non registrata")
                 text += f"\nRiconoscimento fornitore: {reason}"
+            counterpart = self.service.store.db.execute(
+                "SELECT t.amount,t.currency,t.fee,a.name FROM transfers l "
+                "JOIN transactions t ON t.id=CASE WHEN l.movement_out_id=? THEN l.movement_in_id ELSE l.movement_out_id END "
+                "JOIN accounts a ON a.id=t.account_id WHERE l.movement_out_id=? OR l.movement_in_id=?",
+                (row["id"],) * 3,
+            ).fetchone()
+            if counterpart:
+                currency = counterpart["currency"]
+                text += (f"\nContropartita collegata: {counterpart['name']} · {money(counterpart['amount'], currency)}"
+                         f" · Commissione {money(counterpart['fee'], currency)}")
             if row["ledger_account_id"] is None and row["proposed_ledger_code"]:
                 text += "\nConto contabile proposto dalla sottovoce: " + row["proposed_ledger_code"]
             choices = self.service.ledger.candidates(row["description"],row["supplier_id"])

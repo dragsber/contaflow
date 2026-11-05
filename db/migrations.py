@@ -3,7 +3,7 @@ from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
-LATEST_SCHEMA_VERSION = 9
+LATEST_SCHEMA_VERSION = 10
 
 
 def _columns(connection, table):
@@ -206,6 +206,14 @@ def _migration_9(connection):
     _add_column(connection, "supplier_aliases", "category_id INTEGER REFERENCES categories(id)")
 
 
+def _migration_10(connection):
+    _add_column(connection, "accounts", "institution TEXT NOT NULL DEFAULT ''")
+    _add_column(connection, "accounts", "notes TEXT NOT NULL DEFAULT ''")
+    _add_column(connection, "accounts", "archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0,1))")
+    _add_column(connection, "accounts", "import_identity TEXT")
+    _add_column(connection, "opening_balances", "amount_minor INTEGER")
+
+
 def _preserved_data(connection):
     """Compare all pre-existing values, including monetary inputs, without float sums."""
     result = {}
@@ -233,7 +241,7 @@ def migrate(connection: sqlite3.Connection, *, new_database=False) -> None:
     version = schema_version(connection)
     if version > LATEST_SCHEMA_VERSION:
         raise MigrationError("Database creato con una versione più recente di ContaFlow")
-    migrations = {1: lambda db: None, 2: _migration_2, 3: _migration_3, 4: _migration_4, 5: _migration_5, 6: _migration_6, 7: _migration_7, 8: _migration_8, 9: _migration_9}
+    migrations = {1: lambda db: None, 2: _migration_2, 3: _migration_3, 4: _migration_4, 5: _migration_5, 6: _migration_6, 7: _migration_7, 8: _migration_8, 9: _migration_9, 10: _migration_10}
     for target_version in range(version + 1, LATEST_SCHEMA_VERSION + 1):
         safety = None if new_database else backup_before_upgrade(connection)
         previous = schema_version(connection)

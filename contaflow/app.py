@@ -182,10 +182,14 @@ class App(tk.Tk):
         self.account_box.bind("<<ComboboxSelected>>", lambda event: self.refresh_all())
 
     def _build_dashboard(self):
+        from contaflow.accounts import show_accounts
+
         ttk.Label(
             self.dashboard_tab, text="Panoramica del conto selezionato",
             font=("Segoe UI", 16, "bold"),
         ).pack(anchor="w", pady=(0, 12))
+        ttk.Button(self.dashboard_tab, text="Conti bancari e cassa contanti…",
+                   command=lambda: show_accounts(self)).pack(anchor="w")
         self.account_heading = ttk.Label(
             self.dashboard_tab, font=("Segoe UI", 12, "bold"), padding=8
         )
@@ -199,8 +203,8 @@ class App(tk.Tk):
         self.cards.pack(fill="x")
         ttk.Label(
             self.dashboard_tab,
-            text="Il saldo visualizzato deriva dai movimenti importati. "
-                 "Il saldo bancario effettivo richiede un saldo iniziale confermato.",
+            text="Revolut: si usa la data di completamento o, se assente, quella di inizio. "
+                 "La data valuta non concorre al calcolo. I movimenti in sospeso sono esclusi.",
             wraplength=820,
         ).pack(anchor="w")
 
@@ -469,12 +473,12 @@ class App(tk.Tk):
         currency = row["currency"]
         if row["opening_balance_confirmed"]:
             balance_label = (
-                f"Saldo bancario effettivo: {row['bank_balance']:.2f} {currency} "
-                f"(saldo iniziale al {row['opening_as_of']})"
+                f"Saldo calcolato: {row['bank_balance']:.2f} {currency} "
+                f"(saldo iniziale a fine giornata del {row['opening_as_of']})"
             )
         else:
             balance_label = (
-                f"Saldo dei movimenti importati: {row['balance']:.2f} {currency} · "
+                f"Variazione netta dei movimenti: {row['balance']:.2f} {currency} · "
                 "Saldo iniziale non confermato"
             )
         self.account_heading.config(text=f"{row['name']} · {currency} · {balance_label}")

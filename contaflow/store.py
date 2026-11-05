@@ -122,6 +122,9 @@ class Store:
             columns["transactions"].add("ledger_account_id")
         if version >= 8:
             columns["transactions"].add("subcategory_id")
+        if version >= 10:
+            columns["accounts"].update({"institution", "notes", "archived", "import_identity"})
+            columns["opening_balances"] = {"amount_minor"}
         for table, expected in columns.items():
             actual = {row[1] for row in self.db.execute(f"PRAGMA table_info({table})")}
             if not expected <= actual:
@@ -176,7 +179,8 @@ class Store:
     def import_revolut_detailed(self, file, account='Revolut EUR', *, rows=None):
         from adapters.revolut import read_rows, fingerprint
         account_row = self.db.execute(
-            "SELECT id,currency,provider FROM accounts WHERE name=?", (account,)
+            "SELECT id,currency,provider,COALESCE(import_identity,name) AS identity "
+            "FROM accounts WHERE name=? AND archived=0", (account,)
         ).fetchone()
         if account_row is None or account_row["provider"] != "REVOLUT":
             raise ValueError("Seleziona un conto Revolut configurato")
@@ -199,7 +203,7 @@ class Store:
                 currency = row["Valuta"].strip().upper()
                 if currency != account_row["currency"].upper():
                     raise ValueError(f"Valuta {currency} incompatibile con il conto {account}")
-                identity = fingerprint(account, row)
+                identity = fingerprint(account_row["identity"], row)
                 if self.db.execute("SELECT 1 FROM transactions WHERE fingerprint=?", (identity,)).fetchone():
                     result["duplicates"] += 1
                     continue

@@ -39,29 +39,19 @@ class FinanceService:
         return self.store.accounts()
 
     def summary(self, account=None):
+        from services.accounts import balance_movements, calculated_balance, opening_balance
         from services.transfers import account_summary
         summaries = account_summary(self.store, account)
         enriched = []
         for row in summaries:
             item = dict(row)
-            account_id = self.store.db.execute(
-                "SELECT id FROM accounts WHERE name=?", (item["name"],)
-            ).fetchone()["id"]
-            opening = self.store.db.execute(
-                "SELECT as_of,amount FROM opening_balances "
-                "WHERE account_id=? AND confirmed=1 ORDER BY as_of DESC LIMIT 1",
-                (account_id,),
-            ).fetchone()
+            account_id = item["id"]
+            opening = opening_balance(self.store.db, account_id)
             item["opening_balance_confirmed"] = opening is not None
             if opening is not None:
-                movements_after = self.store.db.execute(
-                    "SELECT COALESCE(SUM(amount-fee),0) FROM transactions "
-                    "WHERE account_id=? AND status='COMPLETATO' "
-                    "AND substr(occurred_at,1,10)>?",
-                    (account_id, opening["as_of"]),
-                ).fetchone()[0]
+                movements_after = balance_movements(self.store.db, account_id, after=opening["as_of"])
                 item["opening_as_of"] = opening["as_of"]
-                item["bank_balance"] = float(opening["amount"]) + float(movements_after)
+                item["bank_balance"] = calculated_balance(opening, movements_after)
             else:
                 item["opening_as_of"] = None
                 item["bank_balance"] = None

@@ -45,6 +45,21 @@ class TransferTests(unittest.TestCase):
         self.assertIsNone(self.db.execute("SELECT exchange_rate FROM transfers").fetchone()[0])
         self.assertEqual({r["currency"] for r in self.service.movements()}, {"CHF", "EUR"})
 
+    def test_candidates_do_not_link_and_exclude_same_account_and_other_currency(self):
+        from services.transfers import transfer_candidates
+
+        outgoing = self.movement(-100, fee=1)
+        self.movement(100)
+        self.movement(100, account=2, currency="CHF")
+        valid = self.movement(100, account=3)
+        late = self.movement(100, account=3)
+        with self.db:
+            self.db.execute("UPDATE transactions SET occurred_at='2026-01-10' WHERE id=?", (late,))
+        self.assertEqual([row["id"] for row in transfer_candidates(self.db, outgoing)], [valid])
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM transfers").fetchone()[0], 0)
+        self.service.link_movements(outgoing, valid, "trasferimento")
+        self.assertEqual(transfer_candidates(self.db, outgoing), [])
+
     def test_refund_reduces_expense_and_cannot_exceed_original(self):
         original = self.movement(-100)
         refund = self.movement(40)

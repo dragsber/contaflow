@@ -22,7 +22,26 @@ delle aggiunte, controllo conflitti, conferma e riesecuzione senza duplicati.
 Il workbook di riferimento è presente in una cartella di ispezione separata.
 Nessuna importazione di dati personali eseguita. Provato con XLSX sintetico;
 il workbook originale richiede la scelta delle colonne e il collaudo manuale.
-Fase 06: incremento operativo in GUI. Fasi 03 e 04: da completare nella parte B.
+Fase 06: incremento operativo in GUI, 89 test superati su Windows.
+
+### Sprint fornitori e saldi — incremento B1–B3
+
+Schema 10: metadati dei conti e saldi iniziali esatti per i nuovi inserimenti.
+Gestione dalla Dashboard, con elenco e movimenti del conto. I conti archiviati
+restano leggibili. L'identità d'importazione resta quella originale dopo una
+rinomina, così i fingerprint già salvati continuano a riconoscere i duplicati.
+Nessun conto reale o saldo iniziale creato automaticamente.
+
+Variazione netta e saldo calcolato sono distinti. Il saldo iniziale si riferisce
+alla fine della giornata. Revolut usa la data di completamento, con data di
+inizio come ripiego se non fornita. La data valuta non concorre al calcolo.
+Movimenti non completati esclusi, commissioni sottratte una sola volta.
+
+Nel registro si possono cercare possibili contropartite nella stessa valuta
+entro tre giorni. Per valute diverse resta la selezione manuale delle due gambe,
+senza calcolare un cambio presunto. Contropartita e commissioni sono visibili.
+Fase 03: conti e saldi iniziali operativi. Fase 04: trasferimenti operativi.
+Riconciliazione persistente e movimenti manuali di cassa da completare.
 
 ### Verifica dei backup dall'app
 

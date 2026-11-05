@@ -1,5 +1,35 @@
 import json
+from datetime import date, timedelta
 from decimal import Decimal
+
+
+def transfer_candidates(db, identifier):
+    original = db.execute("SELECT * FROM transactions WHERE id=? AND status='COMPLETATO'",
+                          (identifier,)).fetchone()
+    if original is None or original["account_id"] is None or original["amount"] == 0:
+        return []
+    if db.execute(
+        "SELECT 1 FROM transfers WHERE movement_out_id=? OR movement_in_id=? UNION ALL "
+        "SELECT 1 FROM refunds WHERE original_movement_id=? OR refund_movement_id=?",
+        (identifier,) * 4,
+    ).fetchone():
+        return []
+    try:
+        day = date.fromisoformat(original["occurred_at"][:10])
+        start, end = day - timedelta(days=3), day + timedelta(days=3)
+    except (ValueError, OverflowError):
+        return []
+    rows = db.execute(
+        "SELECT t.*,a.name AS account FROM transactions t JOIN accounts a ON a.id=t.account_id "
+        "WHERE t.account_id!=? AND t.currency=? AND t.status='COMPLETATO' "
+        "AND substr(t.occurred_at,1,10) BETWEEN ? AND ? "
+        "AND NOT EXISTS(SELECT 1 FROM transfers WHERE movement_out_id=t.id OR movement_in_id=t.id) "
+        "AND NOT EXISTS(SELECT 1 FROM refunds WHERE original_movement_id=t.id OR refund_movement_id=t.id) "
+        "ORDER BY abs(julianday(substr(t.occurred_at,1,10))-julianday(?)),t.occurred_at,t.id",
+        (original["account_id"], original["currency"], start.isoformat(), end.isoformat(), day.isoformat()),
+    )
+    expected = -Decimal(str(original["amount"]))
+    return [row for row in rows if Decimal(str(row["amount"])) == expected]
 
 
 def link_movements(db, outgoing_id, incoming_id, kind="trasferimento"):
