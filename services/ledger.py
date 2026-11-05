@@ -255,6 +255,10 @@ class LedgerService:
     def report(self, year, month):
         return report(self.db, year, month)
 
+    def period_report(self, start, end):
+        from services.period_report import report
+        return report(self.db, start, end)
+
     def save_budget(self, year, month, ledger_id, currency, amount):
         from services.budget import period
         period(year, month)

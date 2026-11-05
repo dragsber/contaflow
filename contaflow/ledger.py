@@ -48,6 +48,7 @@ class LedgerPanel(ttk.Frame):
             ttk.Entry(report_controls,textvariable=var,width=7).pack(side="left",padx=4)
         ttk.Button(report_controls,text="Consuntivo / budget per codice",command=self.report).pack(side="left",padx=6)
         ttk.Button(report_controls,text="Salva budget conto selezionato",command=self.save_budget).pack(side="left")
+        ttk.Button(report_controls,text="Confronto dal / al",command=self.period_report).pack(side="left",padx=6)
 
     def refresh(self):
         self.table.delete(*self.table.get_children())
@@ -198,6 +199,51 @@ class LedgerPanel(ttk.Frame):
             self.service.save_budget(int(self.year.get()),int(self.month.get()),identifier,currency,amount)
         except Exception as error:
             messagebox.showerror("Budget non salvato",str(error),parent=self)
+
+    def period_report(self):
+        start = simpledialog.askstring("Periodo", "Dal (AAAA-MM-GG)", parent=self)
+        if start is None:
+            return
+        end = simpledialog.askstring("Periodo", "Al (AAAA-MM-GG), incluso", parent=self)
+        if end is None:
+            return
+        try:
+            rows = self.service.period_report(start, end)
+        except ValueError as error:
+            messagebox.showerror("Periodo non valido", str(error), parent=self)
+            return
+        win = tk.Toplevel(self)
+        win.title(f"Budget e consuntivo dal {start} al {end}")
+        ttk.Label(win, text="Budget proporzionale ai giorni di ciascun mese · Scostamento = consuntivo − budget · Uscite negative").pack()
+        area = ttk.Frame(win)
+        area.pack(fill="both", expand=True)
+        area.rowconfigure(0, weight=1)
+        area.columnconfigure(0, weight=1)
+        table = ttk.Treeview(area, columns=("code","description","currency","budget","actual","difference","fees","missing"), show="headings")
+        for key,label in (("code","Conto contabile"),("description","Descrizione"),("currency","Valuta"),
+                          ("budget","Budget"),("actual","Consuntivo"),("difference","Differenza"),("fees","Commissioni"),("missing","Mesi senza budget")):
+            table.heading(key, text=label)
+            table.column(key, width=150, stretch=False, anchor="e" if key in ("budget","actual","difference","fees") else "w")
+        table.grid(row=0, column=0, sticky="nsew")
+        vertical = ttk.Scrollbar(area, orient="vertical", command=table.yview)
+        vertical.grid(row=0, column=1, sticky="ns")
+        horizontal = ttk.Scrollbar(area, orient="horizontal", command=table.xview)
+        horizontal.grid(row=1, column=0, sticky="ew")
+        table.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+        for row in rows:
+            table.insert("", "end", values=(row["code"],row["description"],row["currency"],
+                         money(row["budget"],row["currency"]),money(row["actual"],row["currency"]),
+                         money(row["difference"],row["currency"]),money(row["fees"],row["currency"]),row["missing_months"]))
+        def export():
+            path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV","*.csv")])
+            if path:
+                with open(path,"w",encoding="utf-8-sig",newline="") as handle:
+                    writer = csv.writer(handle, delimiter=";")
+                    writer.writerow(("dal","al","conto","descrizione","valuta","budget","consuntivo","differenza","commissioni","mesi_senza_budget"))
+                    for row in rows:
+                        writer.writerow((start,end,row["code"],row["description"],row["currency"],
+                                         row["budget"],row["actual"],row["difference"],row["fees"],row["missing_months"]))
+        ttk.Button(win, text="Esporta CSV", command=export).pack(pady=8)
 
     def report(self):
         try:

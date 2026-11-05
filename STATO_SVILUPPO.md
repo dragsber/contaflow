@@ -1,5 +1,25 @@
 # ContaFlow · Alpha 0.2 C-bis — build intermedia
 
+## Confronto budget per intervallo
+
+L'utente ha chiarito che il workbook è un esempio del suo metodo e non una fonte
+vincolante per i codici o le classificazioni. Un fornitore può essere collegato
+a più voci e la descrizione bancaria può richiedere una scelta manuale.
+
+Il confronto per conto contabile accetta date iniziali e finali incluse, somma
+i movimenti effettivi nel periodo e ripartisce ogni budget mensile per i giorni
+effettivamente compresi, usando il numero reale di giorni del mese. Valute
+separate, commissioni distinte, movimenti non assegnati visibili. Segnala il
+numero di mesi privi di budget e permette esportazione CSV. Arrotondamento
+alla fine del calcolo per voce e valuta. La visualizzazione usa il segno
+contabile, uscite negative e differenza = consuntivo meno budget.
+Resta distinto il budget per categoria già presente. La nuova funzione
+interroga i budget per conto contabile e non trasferisce automaticamente valori
+dal budget per categoria. Collaudo manuale dell'interfaccia e dell'export pendente.
+
+Test sintetici dedicati superati per giorni inclusi, mesi parziali, febbraio
+bisestile, valute separate e mesi senza budget.
+
 ## Incremento C-bis
 
 Ultimo commit remoto di partenza verificato fb460f6ef5d2c905fdcaac41c83bd49c7f2a73ba.
