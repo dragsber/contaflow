@@ -1,17 +1,18 @@
 import csv, os, sqlite3, hashlib, json
 from pathlib import Path
 from datetime import datetime
+from db import migrations
 from db.migrations import migrate, backup_before_upgrade, MigrationError, schema_version
 
 DEFAULT_ACCOUNTS = [('Revolut EUR','EUR','REVOLUT'),('Revolut CHF','CHF','REVOLUT'),('BPER EUR','EUR','BPER'),('Cassa contanti','EUR','CASH')]
 
+def default_data_path():
+    return Path(os.environ.get('LOCALAPPDATA') or Path.home()) / 'ContaFlow' / 'contaflow.sqlite3'
+
+
 def data_directory():
     configured = os.environ.get('CONTAFLOW_DATA_DIR')
-    root = Path(configured).expanduser() if configured else (
-        Path(os.environ.get('LOCALAPPDATA', Path.home())) / 'ContaFlow'
-    )
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+    return (Path(configured).expanduser() if configured else default_data_path().parent).resolve()
 
 
 def data_path():
@@ -19,12 +20,31 @@ def data_path():
 
 class Store:
     def __init__(self, path=None):
-        self.path = str(path or data_path())
-        self.db = sqlite3.connect(self.path)
-        self.db.row_factory = sqlite3.Row
-        is_new = self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone() is None
+        target = Path(path if path is not None else data_path()).resolve()
+        self.path = str(target)
+        self.db = None
         safety = None
         try:
+            try:
+                target.stat()
+                is_new = False
+            except FileNotFoundError:
+                is_new = True
+            if is_new:
+                default = default_data_path().resolve()
+                if path is None and target != default and default.exists():
+                    raise MigrationError(f"Il percorso configurato non esiste. Archivio predefinito presente in {default}.")
+                if path is None:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+            mode = "rwc" if is_new else "rw"
+            self.db = sqlite3.connect(f"{target.as_uri()}?mode={mode}", uri=True)
+            self.db.row_factory = sqlite3.Row
+            if not is_new:
+                version = self._validate_existing()
+                self.db.execute("PRAGMA foreign_keys=ON")
+                if version >= 2:
+                    migrate(self.db)
+                    return
             safety = backup_before_upgrade(self.db)
             self.db.executescript("""
             PRAGMA foreign_keys=ON;
@@ -43,19 +63,72 @@ class Store:
             self.db.commit()
             migrate(self.db, new_database=is_new)
         except Exception as error:
-            try:
-                self.db.rollback()
-                try:
-                    integrity = self.db.execute("PRAGMA integrity_check").fetchone()[0]
-                    version = schema_version(self.db)
-                except sqlite3.Error:
-                    integrity, version = "non verificabile", "non verificabile"
-            finally:
+            if self.db is not None:
                 self.db.close()
+            if isinstance(error, MigrationError):
+                reason = str(error)
+            else:
+                code = getattr(error, "sqlite_errorname", None) or type(error).__name__
+                reason = f"Impossibile aprire o leggere il database ({code})."
             raise MigrationError(
-                f"Avvio interrotto. Integrità database: {integrity}. Versione: {version}. "
-                f"Copia precedente: {safety or 'vedi dettaglio errore'}. {error}"
+                f"Avvio interrotto. Database: {target}\nCausa: {reason}"
+                + (f"\nCopia precedente: {safety}" if safety else "")
             ) from error
+
+    def _validate_existing(self):
+        tables = {row[0] for row in self.db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+        if "schema_version" in tables:
+            versions = [row[0] for row in self.db.execute("SELECT version FROM schema_version")]
+            if len(versions) != 1 or type(versions[0]) is not int or not 1 <= versions[0] <= migrations.LATEST_SCHEMA_VERSION:
+                raise MigrationError("Versione dello schema non supportata.")
+            version = versions[0]
+        else:
+            version = 0
+        required = {"accounts", "transactions", "categories", "merchants", "audit"}
+        # The original account-only schema was also supported by the legacy bootstrap.
+        account_only = version == 0 and tables - {"sqlite_sequence"} == {"accounts"}
+        if account_only:
+            required = {"accounts"}
+        for first_version, names in (
+            (2, {"suppliers", "supplier_aliases", "classification_rules", "importations",
+                 "transfers", "refunds", "budgets", "opening_balances"}),
+            (5, {"supplier_categories"}),
+            (7, {"ledger_accounts", "ledger_categories", "supplier_ledger", "alias_ledger",
+                 "ledger_rules", "ledger_imports", "ledger_budgets"}),
+            (8, {"subcategories", "subcategory_budgets", "supplier_subcategories",
+                 "alias_subcategories", "subcategory_rules", "legacy_allocations"}),
+        ):
+            if version >= first_version:
+                required.update(names)
+        if not required <= tables:
+            raise MigrationError("Schema ContaFlow inatteso: mancano tabelle richieste.")
+        columns = {
+            "accounts": {"id", "name", "currency"},
+            "transactions": {"id", "account_id", "fingerprint", "occurred_at", "description",
+                             "amount", "fee", "currency", "kind", "status", "category_id",
+                             "source_json", "imported_at"},
+        }
+        if account_only:
+            del columns["transactions"]
+        if version >= 2:
+            columns["accounts"].add("provider")
+            columns["transactions"].update({"supplier_id", "classification_status",
+                                            "classification_origin", "importation_id"})
+        if version >= 4:
+            columns["transactions"].update({"notes", "accounting_nature"})
+        if version >= 7:
+            columns["transactions"].add("ledger_account_id")
+        if version >= 8:
+            columns["transactions"].add("subcategory_id")
+        for table, expected in columns.items():
+            actual = {row[1] for row in self.db.execute(f"PRAGMA table_info({table})")}
+            if not expected <= actual:
+                raise MigrationError(f"Schema ContaFlow inatteso: colonne mancanti in {table}.")
+        if self.db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise MigrationError("Controllo di integrità SQLite fallito.")
+        return version
     @staticmethod
     def normalize_description(value):
         import re

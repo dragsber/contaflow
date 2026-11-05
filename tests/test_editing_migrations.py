@@ -66,8 +66,12 @@ class EditingMigrationTests(unittest.TestCase):
                     return super().execute("SELECT 'corrupt'")
                 return super().execute(sql, *args)
 
-        with patch("db.migrations.sqlite3.connect",
-                   side_effect=lambda *a, **kw: connect(*a, factory=InvalidBackup, **kw)):
+        def connect_with_invalid_backup(path, **kwargs):
+            if Path(path).parent.name == "backups":
+                kwargs["factory"] = InvalidBackup
+            return connect(path, **kwargs)
+
+        with patch("db.migrations.sqlite3.connect", side_effect=connect_with_invalid_backup):
             with self.assertRaisesRegex(MigrationError, "copia di sicurezza"):
                 Store(self.path)
         with closing(connect(self.path)) as db:
