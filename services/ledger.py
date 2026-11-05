@@ -131,7 +131,8 @@ def candidates(store, description, supplier_id):
     ).fetchone()
     if confirmed:
         return [confirmed[0]]
-    alias = db.execute("SELECT id,confirmed FROM supplier_aliases WHERE normalized_alias=?", (key,)).fetchone()
+    alias = db.execute("SELECT id,confirmed FROM supplier_aliases WHERE normalized_alias=? AND archived=0 AND supplier_id=?",
+                       (key, supplier_id)).fetchone()
     if alias:
         rows = db.execute(
             "SELECT l.id FROM alias_ledger a JOIN ledger_accounts l ON l.id=a.ledger_id "

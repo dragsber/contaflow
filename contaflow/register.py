@@ -266,6 +266,16 @@ class MovementRegister(ttk.Frame):
                 ("Lotto", row["importation_id"]),
             )
             text = "\n".join(f"{label}: {value}" for label, value in details)
+            supplier_reasons = {
+                "confermata": "associazione confermata",
+                "alias": "alias bancario esatto",
+                "regola": "regola deterministica",
+                "manuale": "selezione manuale",
+                "proposta": "proposta da verificare",
+            }
+            if row["supplier_id"] is not None:
+                reason = supplier_reasons.get(row["classification_origin"], "origine non registrata")
+                text += f"\nRiconoscimento fornitore: {reason}"
             if row["ledger_account_id"] is None and row["proposed_ledger_code"]:
                 text += "\nConto contabile proposto dalla sottovoce: " + row["proposed_ledger_code"]
             choices = self.service.ledger.candidates(row["description"],row["supplier_id"])
@@ -277,7 +287,7 @@ class MovementRegister(ttk.Frame):
                 choices = subcategory_candidates(self.service.store,row["description"],row["supplier_id"])
                 if choices:
                     available = self.service.store.db.execute("SELECT id,name FROM subcategories WHERE archived=0").fetchall()
-                    text += "\nSottovoci candidate (scelta richiesta): " + ", ".join(r["name"] for r in available if r["id"] in choices)
+                    text += "\nSottovoce in proposta (scelta richiesta): " + ", ".join(r["name"] for r in available if r["id"] in choices)
             text += "\nDati bancari originali\n" + json.dumps(
                 json.loads(row["source_json"]), ensure_ascii=False, indent=2)
         elif selected:

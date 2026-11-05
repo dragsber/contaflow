@@ -259,6 +259,7 @@ class App(tk.Tk):
         ttk.Button(search_bar, text="Nuovo fornitore",
                    command=lambda: self.edit_supplier(new=True)).pack(side="right")
         ttk.Button(search_bar, text="Importa anagrafiche", command=self.import_catalog).pack(side="right", padx=6)
+        ttk.Button(search_bar, text="Associazioni Excel…", command=self.import_associations).pack(side="right")
         self.suppliers_table = ttk.Treeview(
             self.suppliers_tab, columns=("name", "category", "aliases"),
             show="headings", height=19,
@@ -276,7 +277,7 @@ class App(tk.Tk):
                    command=self.edit_supplier).pack(side="left")
         ttk.Button(buttons, text="Aggiungi alias",
                    command=self.add_alias).pack(side="left", padx=6)
-        ttk.Button(buttons, text="Rimuovi alias selezionato",
+        ttk.Button(buttons, text="Gestisci alias…",
                    command=self.remove_alias).pack(side="left")
         ttk.Button(buttons, text="Archivia / riattiva",
                    command=self.toggle_supplier).pack(side="left", padx=6)
@@ -306,6 +307,65 @@ class App(tk.Tk):
                 self.refresh_all()
         except Exception as error:
             show_error(self, "Anagrafiche non importate", str(error), error, "Import anagrafiche")
+
+    def import_associations(self):
+        from services.catalog_import import apply_associations, association_plan, read_catalog
+
+        path = filedialog.askopenfilename(parent=self, filetypes=[("Excel", "*.xlsx")])
+        if not path:
+            return
+        sheet = simpledialog.askstring("Associazioni Excel", "Nome del foglio:", initialvalue="Fornitori", parent=self)
+        if not sheet:
+            return
+        header = simpledialog.askinteger("Associazioni Excel", "Numero della riga di intestazione:",
+                                         initialvalue=1, minvalue=1, parent=self)
+        if header is None:
+            return
+        fields = ("fornitore", "alias", "categoria", "sottovoce", "note")
+        positions = simpledialog.askstring(
+            "Mappatura colonne",
+            "Numeri delle colonne nell'ordine: fornitore, alias, categoria, sottovoce, note.\n"
+            "Separa con virgole e lascia vuoti i campi assenti. A=1, B=2.\nEsempio: 2,1,,,",
+            parent=self,
+        )
+        if positions is None:
+            return
+        store = self.store.store
+        try:
+            values = positions.split(",")
+            if len(values) != len(fields):
+                raise ValueError("Indica cinque posizioni, anche vuote.")
+            mapping = {key: int(value) for key, value in zip(fields, values) if value.strip()}
+            records = read_catalog(path, sheet_name=sheet, header_row=header, mapping=mapping)
+            plan = association_plan(store.db, records, store.normalize_description)
+        except Exception as error:
+            messagebox.showerror("Anteprima non disponibile", str(error), parent=self)
+            return
+        if not plan:
+            messagebox.showinfo("Associazioni Excel", "Nessuna nuova associazione o anagrafica.", parent=self)
+            return
+        window = tk.Toplevel(self)
+        window.title("Anteprima associazioni Excel")
+        preview = tk.Text(window, width=85, height=18, wrap="word")
+        preview.pack(fill="both", expand=True, padx=10, pady=10)
+        preview.insert("1.0", "\n".join(
+            f"{kind.capitalize()}: {name}" + (f" → {value}" if kind != "fornitore" else "")
+            for kind, name, value, _ in plan
+        ))
+        preview.configure(state="disabled")
+
+        def save():
+            if not messagebox.askyesno("Conferma importazione", f"Aggiungere {len(plan)} elementi?", parent=window):
+                return
+            try:
+                apply_associations(store.db, records, store.normalize_description, plan)
+            except Exception as error:
+                messagebox.showerror("Associazioni non importate", str(error), parent=window)
+                return
+            window.destroy()
+            self.refresh_suppliers()
+
+        ttk.Button(window, text="Conferma importazione", command=save).pack(pady=6)
 
     def toggle_supplier(self):
         supplier_id = self._selected_id(self.suppliers_table, "un fornitore")
@@ -435,7 +495,7 @@ class App(tk.Tk):
         self.suppliers_table.delete(*self.suppliers_table.get_children())
         for row in self.store.suppliers(self.supplier_search.get(), self.show_archived_suppliers.get()):
             aliases = ", ".join(
-                item["normalized_alias"] for item in self.store.supplier_aliases(row["id"])
+                item["normalized_alias"] for item in self.store.supplier_aliases(row["id"]) if not item["archived"]
             )
             self.suppliers_table.insert(
                 "", "end", iid=str(row["id"]),
@@ -542,22 +602,39 @@ class App(tk.Tk):
         supplier_id = self._selected_id(self.suppliers_table, "un fornitore")
         if supplier_id is None:
             return
-        aliases = self.store.supplier_aliases(supplier_id)
+        aliases = self.store.supplier_aliases(supplier_id, include_archived=True)
         if not aliases:
             messagebox.showinfo("Alias", "Il fornitore non ha alias.", parent=self)
             return
-        choices = [f"{row['id']} · {row['normalized_alias']}" for row in aliases]
-        picked = simpledialog.askstring(
-            "Rimuovi alias", "Inserisci ID alias da rimuovere:\n" + "\n".join(choices),
-            parent=self,
-        )
-        if not picked:
-            return
-        try:
-            self.store.remove_supplier_alias(int(picked.strip().split("·")[0]))
+        window = tk.Toplevel(self)
+        window.title("Alias bancari del fornitore")
+        choices = tk.Listbox(window, width=75, height=10, exportselection=False)
+        choices.pack(fill="both", expand=True, padx=10, pady=8)
+        for row in aliases:
+            choices.insert("end", row["normalized_alias"] + (" [archiviato]" if row["archived"] else ""))
+
+        def edit(toggle=False):
+            selected = choices.curselection()
+            if not selected:
+                return
+            row = aliases[selected[0]]
+            changes = {"archived": not row["archived"]} if toggle else {}
+            if not toggle:
+                value = simpledialog.askstring("Modifica alias", "Descrizione bancaria:",
+                                               initialvalue=row["normalized_alias"], parent=window)
+                if value is None:
+                    return
+                changes["description"] = value
+            try:
+                self.store.edit_supplier_alias(row["id"], **changes)
+            except ValueError as error:
+                messagebox.showerror("Alias non salvato", str(error), parent=window)
+                return
+            window.destroy()
             self.refresh_suppliers()
-        except Exception as error:
-            show_error(self, 'Alias non rimosso', 'Impossibile rimuovere l\'alias.', error, 'Rimozione alias')
+
+        ttk.Button(window, text="Modifica", command=edit).pack(side="left", padx=10, pady=8)
+        ttk.Button(window, text="Archivia / riattiva", command=lambda: edit(True)).pack(side="left", pady=8)
 
     def edit_category(self, new=False):
         category_id = None if new else self._selected_id(self.categories_table, "una categoria")

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from contaflow.store import Store
 from services.finance import FinanceService
-from services.catalog_import import read_catalog
+from services.catalog_import import apply_associations, association_plan, read_catalog
 
 
 class CatalogTests(unittest.TestCase):
@@ -60,6 +60,34 @@ class CatalogTests(unittest.TestCase):
         records = read_catalog(path)
         self.assertEqual(records[0]["fornitore"], "TEST")
         self.service.import_catalog(records)
+
+        db = self.service.store.db
+        normalize = self.service.store.normalize_description
+        mapped = read_catalog(path, sheet_name="Anagrafiche", mapping={"fornitore": 1, "alias": 5})
+        plan = association_plan(db, mapped, normalize)
+        self.assertEqual([item[0] for item in plan], ["alias"])
+        apply_associations(db, mapped, normalize, plan)
+        self.assertEqual(association_plan(db, mapped, normalize), [])
+        apply_associations(db, mapped, normalize, [])
+        self.assertEqual(len(self.service.suppliers()), 1)
+        self.assertEqual(self.service.suppliers()[0]["notes"], "Nota")
+
+    def test_alias_edit_archive_and_distinct_future_category(self):
+        normal = self.service.create_category("Consueta")
+        special = self.service.create_category("Specifica")
+        supplier = self.service.create_supplier("Bar sintetico", ["Bar 123", "Bar 456"], normal)
+        store = self.service.store
+        store.confirm_supplier_alias(supplier, "Bar 123", special)
+        self.assertEqual(store.classify_description("BAR 123")["category_id"], special)
+        self.assertEqual(store.classify_description("BAR 456")["category_id"], normal)
+        alias = self.service.supplier_aliases(supplier)[0]["id"]
+        self.service.edit_supplier_alias(alias, description="Bar nuova sigla")
+        self.assertIsNone(store.classify_description("Bar 123")["supplier_id"])
+        self.assertEqual(store.classify_description("Bar nuova sigla")["supplier_id"], supplier)
+        self.service.edit_supplier_alias(alias, archived=True)
+        self.assertIsNone(store.classify_description("Bar nuova sigla")["supplier_id"])
+        self.service.edit_supplier_alias(alias, archived=False)
+        self.assertEqual(store.classify_description("Bar nuova sigla")["category_id"], special)
 
     def test_real_supplier_editor_and_navigation(self):
         from contaflow.app import App

@@ -1,3 +1,4 @@
+import json
 import logging
 import sqlite3
 import tempfile
@@ -239,11 +240,11 @@ class FinanceService:
             "SELECT category_id FROM supplier_categories WHERE supplier_id=?", (supplier_id,)
         )]
 
-    def supplier_aliases(self, supplier_id):
+    def supplier_aliases(self, supplier_id, include_archived=False):
         return self.store.db.execute(
-            "SELECT id,normalized_alias,confirmed FROM supplier_aliases "
-            "WHERE supplier_id=? ORDER BY normalized_alias",
-            (supplier_id,),
+            "SELECT id,normalized_alias,confirmed,archived FROM supplier_aliases "
+            "WHERE supplier_id=? AND (? OR archived=0) ORDER BY normalized_alias",
+            (supplier_id, include_archived),
         ).fetchall()
 
     def create_supplier(self, name, aliases=(), habitual_category_id=None):
@@ -293,8 +294,26 @@ class FinanceService:
             )
 
     def remove_supplier_alias(self, alias_id):
-        with self.store.db:
-            self.store.db.execute("DELETE FROM supplier_aliases WHERE id=?", (alias_id,))
+        self.edit_supplier_alias(alias_id, archived=True)
+
+    def edit_supplier_alias(self, alias_id, *, description=None, archived=None):
+        db = self.store.db
+        with db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM supplier_aliases WHERE id=?", (alias_id,)).fetchone()
+            if row is None:
+                raise ValueError("Alias non trovato")
+            key = row["normalized_alias"] if description is None else self.store.normalize_description(description)
+            if not key:
+                raise ValueError("Alias vuoto")
+            if db.execute("SELECT 1 FROM supplier_aliases WHERE normalized_alias=? AND id!=?", (key, alias_id)).fetchone():
+                raise ValueError("Alias già registrato. Verifica il duplicato.")
+            active_state = row["archived"] if archived is None else int(archived)
+            db.execute("UPDATE supplier_aliases SET normalized_alias=?,archived=? WHERE id=?",
+                       (key, active_state, alias_id))
+            db.execute("INSERT INTO audit(field,old_value,new_value) VALUES(?,?,?)",
+                       ("alias_fornitore", json.dumps(dict(row)),
+                        json.dumps({**dict(row), "normalized_alias": key, "archived": active_state})))
 
     def classify_movement(
         self, movement_id, supplier_id=None, category_id=None, remember_alias=False

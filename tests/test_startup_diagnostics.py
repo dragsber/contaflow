@@ -11,7 +11,7 @@ from contaflow.app import App
 from contaflow.diagnostics import report
 from contaflow.runtime import log_startup_event
 from contaflow.store import Store
-from db.migrations import MigrationError
+from db.migrations import LATEST_SCHEMA_VERSION, MigrationError
 from services.finance import FinanceService
 
 
@@ -127,7 +127,7 @@ class StartupTests(unittest.TestCase):
                 self.assertTrue(all(row["description"].endswith(" WAL") for row in service.movements()))
                 log_startup_event("Avvio applicazione", RuntimeError("CONTENUTO-RISERVATO"))
                 content = report(service.store, ["Ricerca"])
-                self.assertIn("schema_version: 8", content)
+                self.assertIn(f"schema_version: {LATEST_SCHEMA_VERSION}", content)
                 self.assertIn("transactions: 5", content)
                 self.assertIn("-wal: presente", content)
                 self.assertIn("PRAGMA integrity_check: ok", content)

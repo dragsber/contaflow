@@ -5,6 +5,29 @@ from services.register import STATUSES
 NATURES = ("ordinario", "trasferimento", "prelievo", "giroconto", "rimborso", "storno", "escluso")
 
 
+def remember_supplier_alias(store, description, supplier, category, movement_id=None):
+    db = store.db
+    alias = store.normalize_description(description)
+    if not alias:
+        raise ValueError("Descrizione non valida per una regola")
+    if db.execute("SELECT 1 FROM suppliers WHERE id=? AND archived=0", (supplier,)).fetchone() is None:
+        raise ValueError("Scegli un fornitore attivo per la regola futura")
+    previous = db.execute("SELECT * FROM supplier_aliases WHERE normalized_alias=?", (alias,)).fetchone()
+    if previous and (previous["supplier_id"] != supplier or previous["archived"]):
+        raise ValueError("Alias già riservato. Controlla gli alias in Fornitori.")
+    db.execute(
+        "INSERT INTO supplier_aliases(normalized_alias,supplier_id,confirmed,category_id) "
+        "VALUES(?,?,1,?) ON CONFLICT(normalized_alias) DO UPDATE SET "
+        "confirmed=1,category_id=excluded.category_id",
+        (alias, supplier, category),
+    )
+    db.execute(
+        "INSERT INTO audit(transaction_id,field,old_value,new_value) VALUES(?,?,?,?)",
+        (movement_id, "regola_futura", json.dumps(dict(previous) if previous else None),
+         json.dumps({"alias": alias, "supplier_id": supplier, "category_id": category})),
+    )
+
+
 def update_movements(store, movement_ids, changes, remember=False):
     ids = list(dict.fromkeys(int(value) for value in movement_ids))
     if not ids:
@@ -59,27 +82,7 @@ def update_movements(store, movement_ids, changes, remember=False):
             if remember:
                 if supplier is None:
                     raise ValueError("Scegli un fornitore per la regola futura")
-                alias = store.normalize_description(row["description"])
-                if not alias:
-                    raise ValueError("Descrizione non valida per una regola")
-                previous = db.execute(
-                    "SELECT * FROM supplier_aliases WHERE normalized_alias=?", (alias,)
-                ).fetchone()
-                db.execute(
-                    "INSERT INTO supplier_aliases(normalized_alias,supplier_id,confirmed) "
-                    "VALUES(?,?,1) ON CONFLICT(normalized_alias) DO UPDATE SET "
-                    "supplier_id=excluded.supplier_id,confirmed=1", (alias, supplier),
-                )
-                old_category = db.execute(
-                    "SELECT habitual_category_id FROM suppliers WHERE id=?", (supplier,)
-                ).fetchone()[0]
-                db.execute("UPDATE suppliers SET habitual_category_id=? WHERE id=?", (category, supplier))
-                db.execute(
-                    "INSERT INTO audit(transaction_id,field,old_value,new_value) VALUES(?,?,?,?)",
-                    (movement_id, "regola_futura", json.dumps(dict(previous) if previous else None),
-                     json.dumps({"alias": alias, "supplier_id": supplier, "category_id": category,
-                                 "previous_category_id": old_category})),
-                )
+                remember_supplier_alias(store, row["description"], supplier, category, movement_id)
             for field, value in updates.items():
                 if row[field] != value:
                     db.execute(f"UPDATE transactions SET {field}=? WHERE id=?", (value, movement_id))

@@ -126,45 +126,13 @@ class Store:
             actual = {row[1] for row in self.db.execute(f"PRAGMA table_info({table})")}
             if not expected <= actual:
                 raise MigrationError(f"Schema ContaFlow inatteso: colonne mancanti in {table}.")
+        if version >= 9 and not {"archived", "category_id"} <= {
+            row[1] for row in self.db.execute("PRAGMA table_info(supplier_aliases)")
+        }:
+            raise MigrationError("Schema ContaFlow inatteso: colonne alias mancanti.")
         if self.db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise MigrationError("Controllo di integrità SQLite fallito.")
         return version
-    @staticmethod
-    def normalize_description(value):
-        import re
-        text=' '.join(value.upper().split())
-        text=re.sub(r'^(CARD PAYMENT|PAGAMENTO CARTA|PAGAMENTO CON CARTA)\s+', '', text)
-        text=re.sub(r'\b(?:REF|REFERENCE|ID|CARD)[:#]?\s*[A-Z0-9-]+\b', ' ', text)
-        return ' '.join(text.split())
-
-    def classify_description(self, description):
-        key=self.normalize_description(description)
-        aliases=self.db.execute(
-            'SELECT sa.supplier_id,sa.confirmed,s.name,s.habitual_category_id '
-            'FROM supplier_aliases sa JOIN suppliers s ON s.id=sa.supplier_id '
-            'WHERE sa.normalized_alias=? AND s.archived=0',(key,)).fetchone()
-        if aliases and aliases['confirmed']:
-            status='classificato' if aliases['habitual_category_id'] else 'proposto'
-            return {'supplier_id':aliases['supplier_id'],'category_id':aliases['habitual_category_id'],'status':status,'origin':'confermata'}
-        if aliases:
-            status='classificato' if aliases['habitual_category_id'] else 'proposto'
-            return {'supplier_id':aliases['supplier_id'],'category_id':aliases['habitual_category_id'],'status':status,'origin':'alias' if status=='classificato' else 'proposta'}
-        for rule in self.db.execute('SELECT * FROM classification_rules WHERE enabled=1'):
-            if self.normalize_description(rule['exact_description'])==key:
-                return {'supplier_id':rule['supplier_id'],'category_id':rule['category_id'],'status':'classificato','origin':'regola'}
-        supplier=self.db.execute('SELECT id,habitual_category_id FROM suppliers WHERE UPPER(name)=? AND archived=0',(key,)).fetchone()
-        if supplier:
-            return {'supplier_id':supplier['id'],'category_id':supplier['habitual_category_id'],'status':'proposto','origin':'proposta'}
-        return {'supplier_id':None,'category_id':None,'status':'in_attesa','origin':None}
-
-    def confirm_supplier_alias(self, supplier_id, description, category_id=None):
-        key=self.normalize_description(description)
-        with self.db:
-            self.db.execute('INSERT INTO supplier_aliases(normalized_alias,supplier_id,confirmed) VALUES(?,?,1) ON CONFLICT(normalized_alias) DO UPDATE SET supplier_id=excluded.supplier_id,confirmed=1',(key,supplier_id))
-            if category_id is not None:
-                self.db.execute('UPDATE suppliers SET habitual_category_id=? WHERE id=?',(category_id,supplier_id))
-            self.db.execute('UPDATE transactions SET supplier_id=?,category_id=COALESCE(?,category_id),classification_status=CASE WHEN ? IS NULL THEN classification_status ELSE \'classificato\' END,classification_origin=\'confermata\' WHERE description=?',(supplier_id,category_id,category_id,description))
-
     def accounts(self):
         return self.db.execute('SELECT name,currency,provider FROM accounts ORDER BY id').fetchall()
     @staticmethod
@@ -178,15 +146,14 @@ class Store:
     def classify_description(self, description):
         key=self.normalize_description(description)
         alias=self.db.execute(
-            'SELECT a.supplier_id,a.confirmed,s.habitual_category_id '
+            'SELECT a.supplier_id,a.confirmed,c.id AS category_id '
             'FROM supplier_aliases a JOIN suppliers s ON s.id=a.supplier_id '
-            'WHERE a.normalized_alias=? AND s.archived=0',(key,)).fetchone()
-        if alias and alias['confirmed']:
-            status='classificato' if alias['habitual_category_id'] else 'proposto'
-            return {'supplier_id':alias['supplier_id'],'category_id':alias['habitual_category_id'],'status':status,'origin':'confermata'}
+            'LEFT JOIN categories c ON c.id=COALESCE(a.category_id,s.habitual_category_id) AND c.archived=0 '
+            'WHERE a.normalized_alias=? AND a.archived=0 AND s.archived=0',(key,)).fetchone()
         if alias:
-            status='classificato' if alias['habitual_category_id'] else 'proposto'
-            return {'supplier_id':alias['supplier_id'],'category_id':alias['habitual_category_id'],'status':status,'origin':'alias' if status=='classificato' else 'proposta'}
+            return {'supplier_id':alias['supplier_id'], 'category_id':alias['category_id'],
+                    'status':'classificato' if alias['category_id'] is not None else 'proposto',
+                    'origin':'confermata' if alias['confirmed'] else 'alias'}
         for rule in self.db.execute('SELECT * FROM classification_rules WHERE enabled=1'):
             if self.normalize_description(rule['exact_description']) == key:
                 return {'supplier_id':rule['supplier_id'],'category_id':rule['category_id'],'status':'classificato','origin':'regola'}
@@ -196,12 +163,11 @@ class Store:
         return {'supplier_id':None,'category_id':None,'status':'in_attesa','origin':None}
 
     def confirm_supplier_alias(self, supplier_id, description, category_id=None):
-        key=self.normalize_description(description)
+        from services.editing import remember_supplier_alias
+
         with self.db:
-            self.db.execute('INSERT INTO supplier_aliases(normalized_alias,supplier_id,confirmed) VALUES(?,?,1) ON CONFLICT(normalized_alias) DO UPDATE SET supplier_id=excluded.supplier_id,confirmed=1',(key,supplier_id))
-            if category_id is not None:
-                self.db.execute('UPDATE suppliers SET habitual_category_id=? WHERE id=?',(category_id,supplier_id))
-            self.db.execute("UPDATE transactions SET supplier_id=?,category_id=COALESCE(?,category_id),classification_status='classificato',classification_origin='confermata' WHERE description=?",(supplier_id,category_id,description))
+            self.db.execute("BEGIN IMMEDIATE")
+            remember_supplier_alias(self, description, supplier_id, category_id)
 
     def import_revolut(self, file, account='Revolut EUR'):
         result=self.import_revolut_detailed(file,account)

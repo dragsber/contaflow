@@ -132,7 +132,8 @@ def candidates(store, description, supplier_id):
     ).fetchone()
     if rule:
         return [rule[0]]
-    alias = db.execute("SELECT id FROM supplier_aliases WHERE normalized_alias=?", (key,)).fetchone()
+    alias = db.execute("SELECT id FROM supplier_aliases WHERE normalized_alias=? AND archived=0 AND supplier_id=?",
+                       (key, supplier_id)).fetchone()
     if alias:
         rows = db.execute(
             "SELECT a.subcategory_id FROM alias_subcategories a JOIN subcategories s ON s.id=a.subcategory_id "

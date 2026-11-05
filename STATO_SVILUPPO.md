@@ -2,6 +2,28 @@
 
 ## Budget per categorie e sottovoci
 
+### Sprint fornitori e saldi — incremento A
+
+Base remota verificata: `42d38af30947de6b1209a250f2fe462539cce551`.
+Prima della migrazione: 88 test sintetici superati su Windows, inclusi avvio
+con tutti i conti, backup precedente alla migrazione e verifica dei dati.
+Il recupero dei cinque movimenti è confermato dall'utente. Resta aperta la
+causa per cui l'EXE apriva un archivio con quattro conti e zero movimenti.
+La correzione del filtro è testata su archivi sintetici, con collaudo manuale pendente.
+
+Schema 9 additivo: alias archiviabili e categoria specifica della regola futura,
+senza cambiare la categoria abituale del fornitore. GUI Fornitori con modifica,
+archiviazione e riattivazione degli alias; registro con origine del riconoscimento
+del fornitore distinta dalla proposta di sottovoce. Le regole si applicano a
+importazioni future e non riclassificano lo storico.
+
+Import associazioni XLSX con foglio, riga e colonne configurabili. Anteprima
+delle aggiunte, controllo conflitti, conferma e riesecuzione senza duplicati.
+Il workbook di riferimento è presente in una cartella di ispezione separata.
+Nessuna importazione di dati personali eseguita. Provato con XLSX sintetico;
+il workbook originale richiede la scelta delle colonne e il collaudo manuale.
+Fase 06: incremento operativo in GUI. Fasi 03 e 04: da completare nella parte B.
+
 ### Verifica dei backup dall'app
 
 L'utente ha recuperato i cinque movimenti da una copia del backup pre-migrazione

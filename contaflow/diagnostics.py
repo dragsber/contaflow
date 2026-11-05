@@ -11,7 +11,7 @@ from db.migrations import LATEST_SCHEMA_VERSION, schema_version
 from services.register import STATUSES
 
 
-BUILD = "Alpha 0.2 — diagnostica schema 8 / build 1"
+BUILD = f"Alpha 0.2 — diagnostica schema {LATEST_SCHEMA_VERSION} / build 1"
 
 
 def backup_summary(filename):
