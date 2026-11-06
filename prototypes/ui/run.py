@@ -294,9 +294,10 @@ class UI1(tk.Tk):
         for child in self.card_area.winfo_children():
             child.destroy()
         summaries = {row["id"]: row for row in self.snapshot.summaries}
-        for n, account in enumerate(self.snapshot.accounts):
-            if self.account_var.get() in ("Tutti i conti", account["name"]):
-                self._card(self.card_area, n, account, summaries[account["id"]])
+        visible_accounts = [row for row in self.snapshot.accounts
+                            if self.account_var.get() in ("Tutti i conti", row["name"])]
+        for index, account in enumerate(visible_accounts):
+            self._card(self.card_area, index, account, summaries[account["id"]])
         review = sum(row["classification_status"] in ("proposto", "in_attesa") for row in selected)
         amount_by_currency = {}
         for row in selected:
