@@ -1,5 +1,17 @@
 # ContaFlow · Alpha 0.2 — budget sottovoci, build intermedia
 
+## UI-1 — prototipo grafico autonomo (6 novembre 2026)
+
+**Stato:** codice del prototipo pubblicato in `prototypes/ui/`; **non integrato** nella GUI di produzione. Vedi [roadmap e risultati](docs/DECISIONI_E_ROADMAP_GUI.md) e [istruzioni di avvio](prototypes/ui/README.md).
+
+- Due schermate effettive: Panoramica e Registro movimenti con dettaglio laterale; cinque voci di navigazione delle quali tre segnaposto esplicitamente dichiarati.
+- Stesso layout per tre opzioni di tema: nativo ttk (senza dipendenze), ttkbootstrap 2.2.7 e sv-ttk 2.6.1; Pillow 12.1.0 solo venv prototipo. Le versioni e licenze sono riportate nel README. Nessuna nuova dipendenza nell'EXE principale.
+- Utilizzo esclusivo di dati sintetici: il database campione nasce in TemporaryDirectory e viene poi letto tramite servizi esistenti in modalità SQLite ro; non apre l'archivio personale. **La verifica completa del percorso con veri servizi è pendente nell'ambiente Windows**.
+- Verifiche locali in Linux Python 3.13: sei test puri superati; finestra nativa aperta con snapshot sintetico mock su Xvfb, schermate Panoramica e Registro visualizzate; corretto un problema di leggibilità delle colonne. Non sono state eseguite la suite completa del repository sull'HEAD, i due temi esterni, il test di integrazione del campione sintetico, i controlli Windows/DPI o la build PyInstaller.
+- **Non autorizzato:** UI-2, refactoring Tkinter globale, modifica backend, database reale, importatori, openpyxl, RapidFuzz.
+- Per la ripresa: leggere la roadmap, avviare UI-1 su Windows, testare i tre temi con gli stessi dati e confrontare il Registro a 900×620; richiedere la decisione dell'utente su UI-2.
+
+
 ## Budget per categorie e sottovoci
 
 ### Sprint fornitori e saldi — incremento A
