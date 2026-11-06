@@ -1,0 +1,4 @@
+# SOLO per UI-1, non nell'EXE principale. Verifiche PyPI 2026-11-06.
+ttkbootstrap==2.2.7
+Pillow==12.1.0
+sv-ttk==2.6.1
