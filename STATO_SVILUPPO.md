@@ -41,7 +41,35 @@ Nel registro si possono cercare possibili contropartite nella stessa valuta
 entro tre giorni. Per valute diverse resta la selezione manuale delle due gambe,
 senza calcolare un cambio presunto. Contropartita e commissioni sono visibili.
 Fase 03: conti e saldi iniziali operativi. Fase 04: trasferimenti operativi.
-Riconciliazione persistente e movimenti manuali di cassa da completare.
+92 test superati su Windows per l'incremento B1–B3.
+
+### Sprint fornitori e saldi — incremento B4–B5, build intermedia
+
+Schema 11 additivo: riconciliazioni per conto, valuta e data, con confronto
+tra saldo calcolato e saldo effettivo dichiarato. Si esaminano i movimenti
+inclusi e i possibili duplicati motivati. Gli esiti sono persistenti e
+registrati nell'audit. Una riconciliazione con base cambiata appare da verificare.
+Nessuna rettifica automatica degli importi o dei movimenti bancari.
+
+Cassa contanti: movimenti manuali classificabili con categoria e sottovoce,
+saldo iniziale e confronto con il contante effettivo. Un prelievo si collega
+alla gamba di cassa dal registro. Il trasferimento collegato è escluso dal
+consuntivo e conserva le due gambe. Le commissioni rimangono separate.
+
+Per i nuovi movimenti l'origine del fornitore e quella della sottovoce sono
+registrate separatamente. Lo storico non viene ricalcolato. In anteprima
+Revolut gli stati riconosciuti come sospesi sono contati separatamente, ma
+non vengono conservati in un registro dei sospesi. Il saldo effettivo di
+riferimento si dichiara nella riconciliazione.
+
+Fase 03 operativa per conti, saldi iniziali e riconciliazione manuale. Fase 04
+operativa per trasferimenti collegati e cassa. Fase 06 operativa per alias,
+regole e import mappato. Collaudo manuale EXE e workbook originale pendenti.
+Il candidato precedente è passato con 96 test su Windows. Sul codice
+ricostruito dopo l'interruzione, Python 3.12 su Linux: 83 superati,
+14 saltati per assenza di display Tk. Verificati i backup delle versioni
+precedenti alla migrazione a 11 e la riapertura dei cinque movimenti
+con variazione netta di 393,10 EUR. EXE non compilato in questo ambiente.
 
 ### Verifica dei backup dall'app
 

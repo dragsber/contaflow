@@ -17,6 +17,7 @@ class ImportPreview:
     excluded: int
     currency: str
     anomalies: tuple
+    pending_operations: int = 0
 
 
 def preview_import(store, path, account):
@@ -29,10 +30,13 @@ def preview_import(store, path, account):
     payload = Path(path).read_bytes()
     rows = RevolutCSVAdapter().read(payload)
     anomalies = reconcile(rows)
-    seen, duplicates, excluded = set(), 0, 0
+    seen, duplicates, excluded, pending = set(), 0, 0, 0
     for item in rows:
-        if item.get("State", "").strip().upper() != "COMPLETATO":
+        state = item.get("State", "").strip().upper()
+        if state != "COMPLETATO":
             excluded += 1
+            if state in ("PENDING", "IN SOSPESO", "IN ATTESA", "NON CONTABILIZZATO"):
+                pending += 1
             continue
         if item["Valuta"].strip().upper() != row["currency"].upper():
             raise ValueError("Valuta CSV incompatibile con il conto selezionato")
@@ -43,7 +47,7 @@ def preview_import(store, path, account):
             duplicates += 1
         seen.add(identity)
     return ImportPreview(payload, Path(path).name, account, len(rows),
-                         len(rows)-duplicates-excluded, duplicates, excluded, row["currency"], tuple(anomalies))
+                         len(rows)-duplicates-excluded, duplicates, excluded, row["currency"], tuple(anomalies), pending)
 
 
 def confirm_import(store, preview):

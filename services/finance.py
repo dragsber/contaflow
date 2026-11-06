@@ -270,18 +270,24 @@ class FinanceService:
         key = self.store.normalize_description(alias)
         if not key:
             raise ValueError("Alias vuoto")
-        existing = self.store.db.execute(
-            "SELECT supplier_id FROM supplier_aliases WHERE normalized_alias=?", (key,)
-        ).fetchone()
-        if existing is not None and existing[0] != supplier_id:
-            raise ValueError("Alias già associato a un altro fornitore. Verifica il duplicato.")
-        with self.store.db:
-            self.store.db.execute(
+        db = self.store.db
+        with db:
+            db.execute("BEGIN IMMEDIATE")
+            existing = db.execute("SELECT * FROM supplier_aliases WHERE normalized_alias=?", (key,)).fetchone()
+            if existing is not None and existing["supplier_id"] != supplier_id:
+                raise ValueError("Alias già associato a un altro fornitore. Verifica il duplicato.")
+            if existing is not None and existing["archived"]:
+                raise ValueError("L'alias è archiviato. Riattivalo dalla gestione degli alias.")
+            db.execute(
                 "INSERT INTO supplier_aliases(normalized_alias,supplier_id,confirmed) "
                 "VALUES(?,?,?) ON CONFLICT(normalized_alias) DO UPDATE SET "
-                "supplier_id=excluded.supplier_id,confirmed=MAX(confirmed,excluded.confirmed)",
+                "confirmed=MAX(confirmed,excluded.confirmed)",
                 (key, supplier_id, int(confirmed)),
             )
+            current = db.execute("SELECT * FROM supplier_aliases WHERE normalized_alias=?", (key,)).fetchone()
+            if existing is None or dict(existing) != dict(current):
+                db.execute("INSERT INTO audit(field,old_value,new_value) VALUES(?,?,?)",
+                           ("alias_fornitore", json.dumps(dict(existing) if existing else None), json.dumps(dict(current))))
 
     def remove_supplier_alias(self, alias_id):
         self.edit_supplier_alias(alias_id, archived=True)

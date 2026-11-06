@@ -99,6 +99,7 @@ class Store:
                  "ledger_rules", "ledger_imports", "ledger_budgets"}),
             (8, {"subcategories", "subcategory_budgets", "supplier_subcategories",
                  "alias_subcategories", "subcategory_rules", "legacy_allocations"}),
+            (11, {"reconciliations"}),
         ):
             if version >= first_version:
                 required.update(names)
@@ -125,6 +126,8 @@ class Store:
         if version >= 10:
             columns["accounts"].update({"institution", "notes", "archived", "import_identity"})
             columns["opening_balances"] = {"amount_minor"}
+        if version >= 11:
+            columns["transactions"].update({"supplier_origin", "subcategory_origin"})
         for table, expected in columns.items():
             actual = {row[1] for row in self.db.execute(f"PRAGMA table_info({table})")}
             if not expected <= actual:
@@ -217,13 +220,14 @@ class Store:
                 self.db.execute(
                     "INSERT INTO transactions(id,fingerprint,account_id,occurred_at,description,"
                     "amount,currency,fee,kind,status,source_json,supplier_id,category_id,"
-                    "classification_status,classification_origin,importation_id) "
-                    "VALUES(?,?,?,?,?,?,?,?,?,'COMPLETATO',?,?,?,?,?,?)",
+                    "classification_status,classification_origin,importation_id,supplier_origin) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,'COMPLETATO',?,?,?,?,?,?,?)",
                     (next_id, identity, account_row["id"],
                      row.get("Data di completamento") or row["Data di inizio"], row["Descrizione"],
                      float(row["Importo"]), currency, float(row.get("Costo") or 0), row["Tipo"],
                      json.dumps(row, ensure_ascii=False, sort_keys=True), classification["supplier_id"],
-                     classification["category_id"], classification["status"], classification["origin"], batch),
+                     classification["category_id"], classification["status"], classification["origin"], batch,
+                     classification["origin"] if classification["supplier_id"] is not None else None),
                 )
                 next_id += 1
                 from services.ledger import candidates
@@ -233,13 +237,15 @@ class Store:
                 elif len(choices) > 1 and classification["status"] in ("classificato","proposto","in_attesa"):
                     self.db.execute("UPDATE transactions SET classification_status='proposto' WHERE id=?", (next_id-1,))
                     classification["status"] = "proposto"
-                from services.subcategories import candidates as subcategory_candidates
-                sub_choices = subcategory_candidates(self, row["Descrizione"], classification["supplier_id"])
-                if len(sub_choices) == 1:
+                from services.subcategories import resolve_candidates
+                sub_choices, sub_origin = resolve_candidates(self, row["Descrizione"], classification["supplier_id"])
+                if len(sub_choices) == 1 and (classification["origin"] != "proposta" or sub_origin == "regola"):
                     candidate = self.db.execute("SELECT category_id FROM subcategories WHERE id=?", (sub_choices[0],)).fetchone()
                     if classification["category_id"] is None or classification["category_id"] == candidate[0]:
-                        self.db.execute("UPDATE transactions SET category_id=?,subcategory_id=? WHERE id=?",
-                                        (candidate[0],sub_choices[0],next_id-1))
+                        self.db.execute(
+                            "UPDATE transactions SET category_id=?,subcategory_id=?,subcategory_origin=? WHERE id=?",
+                            (candidate[0], sub_choices[0], sub_origin, next_id-1),
+                        )
                     elif classification["status"] in ("classificato","proposto","in_attesa"):
                         self.db.execute("UPDATE transactions SET classification_status='proposto' WHERE id=?",(next_id-1,))
                         classification["status"] = "proposto"

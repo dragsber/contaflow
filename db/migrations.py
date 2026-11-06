@@ -3,7 +3,7 @@ from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
-LATEST_SCHEMA_VERSION = 10
+LATEST_SCHEMA_VERSION = 11
 
 
 def _columns(connection, table):
@@ -214,6 +214,19 @@ def _migration_10(connection):
     _add_column(connection, "opening_balances", "amount_minor INTEGER")
 
 
+def _migration_11(connection):
+    _add_column(connection, "transactions", "supplier_origin TEXT")
+    _add_column(connection, "transactions", "subcategory_origin TEXT")
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS reconciliations ("
+        "id INTEGER PRIMARY KEY,account_id INTEGER NOT NULL REFERENCES accounts(id),"
+        "as_of TEXT NOT NULL,currency TEXT NOT NULL,actual_minor INTEGER NOT NULL,"
+        "calculated TEXT NOT NULL,difference TEXT NOT NULL,status TEXT NOT NULL "
+        "CHECK(status IN ('confermata','da verificare')),basis TEXT NOT NULL,"
+        "updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(account_id,as_of))"
+    )
+
+
 def _preserved_data(connection):
     """Compare all pre-existing values, including monetary inputs, without float sums."""
     result = {}
@@ -241,7 +254,11 @@ def migrate(connection: sqlite3.Connection, *, new_database=False) -> None:
     version = schema_version(connection)
     if version > LATEST_SCHEMA_VERSION:
         raise MigrationError("Database creato con una versione più recente di ContaFlow")
-    migrations = {1: lambda db: None, 2: _migration_2, 3: _migration_3, 4: _migration_4, 5: _migration_5, 6: _migration_6, 7: _migration_7, 8: _migration_8, 9: _migration_9, 10: _migration_10}
+    migrations = {
+        1: lambda db: None, 2: _migration_2, 3: _migration_3, 4: _migration_4,
+        5: _migration_5, 6: _migration_6, 7: _migration_7, 8: _migration_8,
+        9: _migration_9, 10: _migration_10, 11: _migration_11,
+    }
     for target_version in range(version + 1, LATEST_SCHEMA_VERSION + 1):
         safety = None if new_database else backup_before_upgrade(connection)
         previous = schema_version(connection)

@@ -702,6 +702,7 @@ class App(tk.Tk):
                 f"Conto: {preview.account}\nValuta: {preview.currency}\n"
                 f"Righe totali: {preview.total}\nImportabili: {preview.importable}\n"
                 f"Duplicati: {preview.duplicates}\nEscluse: {preview.excluded}\n"
+                f"Operazioni in sospeso (comprese nelle escluse): {preview.pending_operations}\n"
                 f"Anomalie di riconciliazione: {len(preview.anomalies)}\n"
             )
             self.tabs.select(self.import_tab)

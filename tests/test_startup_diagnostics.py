@@ -59,6 +59,24 @@ class StartupTests(unittest.TestCase):
             db.execute("UPDATE accounts SET name='Conto sintetico EUR', currency='EUR' WHERE id=2")
             db.execute("UPDATE transactions SET currency='EUR'")
 
+    def test_upgrade_preserves_data_and_backs_up_each_version_before_writes(self):
+        self.seed()
+        for _ in range(2):
+            service = FinanceService()
+            with closing(service.store.db):
+                rows = service.movements()
+                self.assertEqual(len(rows), 5)
+                self.assertEqual(len(service.accounts()), 4)
+                self.assertTrue(all(row["classification_status"] == "classificato"
+                                    and row["supplier"] == "Fornitore sintetico segreto" for row in rows))
+                self.assertEqual(service.summary("Conto sintetico EUR")[0]["balance"], Decimal("393.10"))
+        for version in range(7, LATEST_SCHEMA_VERSION):
+            backup, = self.path.parent.glob(f"backups/*_v{version}_*.sqlite3")
+            with closing(sqlite3.connect(backup.as_uri() + "?mode=ro", uri=True)) as db:
+                self.assertEqual(db.execute("SELECT version FROM schema_version").fetchone()[0], version)
+                self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 5)
+
     def test_startup_shows_old_movements_on_second_account(self):
         self.seed()
         for _ in range(2):

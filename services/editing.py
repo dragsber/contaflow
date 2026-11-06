@@ -79,6 +79,8 @@ def update_movements(store, movement_ids, changes, remember=False):
             updates = {**changes, "classification_origin": "confermata" if remember else "manuale"}
             supplier = changes.get("supplier_id", row["supplier_id"])
             category = changes.get("category_id", row["category_id"])
+            if "supplier_id" in changes or remember:
+                updates["supplier_origin"] = updates["classification_origin"] if supplier is not None else None
             if remember:
                 if supplier is None:
                     raise ValueError("Scegli un fornitore per la regola futura")

@@ -145,6 +145,7 @@ class SubcategoryTests(unittest.TestCase):
         self.assertIsNone(row["subcategory_id"])
         self.assertEqual(row["supplier_id"], supplier)
         self.assertEqual(row["classification_origin"], "alias")
+        self.assertEqual(row["supplier_origin"], "alias")
         self.assertEqual(row["classification_status"],"proposto")
         sub.associate(self.db,supplier,[self.a,self.b],habitual=self.b)
         self.assertEqual(sub.candidates(self.service.store,"SHOP",supplier),[self.b])
@@ -152,6 +153,7 @@ class SubcategoryTests(unittest.TestCase):
         self.service.import_revolut(filename,"Revolut EUR")
         row = self.service.movements()[0]
         self.assertEqual(row["subcategory_id"],self.b)
+        self.assertEqual(row["subcategory_origin"], "abituale")
         self.assertEqual(row["category_id"],self.category)
 
     def test_alias_and_confirmed_manual_rule_and_preserve_history(self):

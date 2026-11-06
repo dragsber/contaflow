@@ -1,5 +1,6 @@
 import csv
 import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -64,6 +65,22 @@ class ImportWorkflowTests(unittest.TestCase):
         self.assertTrue(self.service.movement_audit(first))
         self.service.confirm_import(preview)
         self.assertGreater(min(r["id"] for r in self.service.movements()), first)
+
+    def test_revolut_completion_date_and_pending_are_distinct_from_value_date(self):
+        with self.path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(("Tipo", "Data di inizio", "Data di completamento", "Data valuta",
+                             "Descrizione", "Importo", "Valuta", "Costo", "State", "Saldo"))
+            writer.writerow(("CARD", "2026-01-01", "2026-01-02", "2026-01-03",
+                             "Contabilizzato", "-10", "EUR", "1", "COMPLETATO", "89"))
+            writer.writerow(("CARD", "2026-01-02", "", "", "In attesa", "-20", "EUR", "0", "PENDING", ""))
+        preview = self.service.preview_import(self.path, "Revolut EUR")
+        self.assertEqual((preview.importable, preview.excluded, preview.pending_operations), (1, 1, 1))
+        self.service.confirm_import(preview)
+        movement, = self.service.movements()
+        self.assertEqual(movement["occurred_at"], "2026-01-02")
+        self.assertEqual(json.loads(movement["source_json"])["Data valuta"], "2026-01-03")
+        self.assertEqual(self.service.summary("Revolut EUR")[0]["balance"], -11)
 
     def test_cancel_without_dependencies(self):
         preview = self.service.preview_import(self.path, "Revolut EUR")

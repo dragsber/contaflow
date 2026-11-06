@@ -1,10 +1,13 @@
 import tkinter as tk
+from decimal import Decimal
 from tkinter import messagebox, ttk
 
 from services.accounts import (
     archive_account, balance_movements, list_accounts, opening_balance, save_account, save_opening,
 )
 from services.register import money
+from services.reconciliation import latest_reconciliation, preview_reconciliation, save_reconciliation
+from services.cash import record_cash_movement
 
 
 TYPES = {
@@ -19,11 +22,12 @@ def show_accounts(app):
     db = app.store.store.db
     window = tk.Toplevel(app)
     window.title("Conti bancari e cassa contanti")
-    columns = ("nome", "tipo", "valuta", "istituto", "variazione", "saldo", "ultimo", "stato")
+    columns = ("nome", "tipo", "valuta", "istituto", "variazione", "saldo", "ultimo", "stato", "riconciliazione")
     table = ttk.Treeview(window, columns=columns, show="headings", selectmode="browse", height=8)
     for column, title, width in zip(columns,
-        ("Nome", "Tipo", "Valuta", "Istituto", "Variazione netta", "Saldo calcolato", "Ultimo movimento", "Stato"),
-        (150, 145, 65, 100, 120, 120, 130, 90)):
+        ("Nome", "Tipo", "Valuta", "Istituto", "Variazione netta", "Saldo calcolato",
+         "Ultimo movimento", "Stato", "Ultima riconciliazione"),
+        (150, 145, 65, 100, 120, 120, 130, 90, 220)):
         table.heading(column, text=title)
         table.column(column, width=width, stretch=False)
     scrollbar = ttk.Scrollbar(window, orient="horizontal", command=table.xview)
@@ -40,11 +44,17 @@ def show_accounts(app):
         for identifier, row in rows.items():
             summary, currency = summaries[identifier], row["currency"]
             balance = summary["bank_balance"]
+            check = latest_reconciliation(db, row["id"])
+            reconciliation = "Non verificato"
+            if check:
+                reconciliation = (f"Saldo riconciliato al {check['as_of']}: "
+                                  f"{money(Decimal(check['actual_minor']).scaleb(-2), currency)}"
+                                  if check["status"] == "confermata" else f"{check['as_of']} · Da verificare")
             table.insert("", "end", iid=identifier, values=(
                 row["name"], next((name for name, code in TYPES.items() if code == row["provider"]), row["provider"]),
                 currency, row["institution"], money(summary["balance"], currency),
                 money(balance, currency) if balance is not None else "Non impostato",
-                row["last_movement"] or "—", "Archiviato" if row["archived"] else "Attivo",
+                row["last_movement"] or "—", "Archiviato" if row["archived"] else "Attivo", reconciliation,
             ))
 
     def selection():
@@ -132,15 +142,121 @@ def show_accounts(app):
         if row and messagebox.askyesno("Conferma", "Cambiare lo stato di archiviazione?", parent=window):
             save(lambda: archive_account(db, row["id"], not row["archived"]))
 
+    def reconcile():
+        row = selection()
+        if row is not None:
+            show_reconciliation(window, db, row, save)
+
+    def cash():
+        row = selection()
+        if row is None:
+            return
+        if row["provider"] != "CASH" or row["archived"]:
+            messagebox.showinfo("Cassa contanti", "Seleziona una cassa contanti attiva.", parent=window)
+            return
+        show_cash_entry(window, db, row, save)
+
     actions = ttk.Frame(window)
     actions.pack(fill="x", padx=8, pady=8)
     for label, command in (
         ("Nuovo", lambda: edit(True)), ("Modifica", edit), ("Archivia / riattiva", archive),
         ("Saldo iniziale", opening), ("Movimenti del conto", movements),
         ("Movimenti nel calcolo", lambda: movements(True)),
+        ("Riconciliazione…", reconcile), ("Movimento di cassa…", cash),
     ):
         ttk.Button(actions, text=label, command=command).pack(side="left", padx=3)
     refresh()
+
+
+def show_reconciliation(parent, db, account, save):
+    dialog = tk.Toplevel(parent)
+    dialog.title(f"Riconciliazione · {account['name']}")
+    currency = account["currency"]
+    latest = latest_reconciliation(db, account["id"])
+    fields = (("Data di fine giornata (AAAA-MM-GG)", latest["as_of"] if latest else "", ()),
+              (f"Saldo effettivo dichiarato in {currency}",
+               str(Decimal(latest["actual_minor"]).scaleb(-2)) if latest else "", ()))
+    day, amount = form(dialog, fields)
+    content = tk.Text(dialog, width=90, height=17, wrap="word", state="disabled")
+    content.grid(row=3, column=0, columnspan=2, padx=8, pady=5, sticky="nsew")
+    snapshot = None
+
+    def compare():
+        nonlocal snapshot
+        snapshot = None
+        persist.configure(state="disabled")
+        try:
+            snapshot = preview_reconciliation(db, account["id"], day.get(), amount.get())
+        except ValueError as error:
+            messagebox.showerror("Confronto non disponibile", str(error), parent=dialog)
+            return
+        lines = [
+            f"Saldo calcolato al {snapshot.day}: {money(snapshot.calculated, currency)}",
+            f"Saldo effettivo dichiarato: {money(snapshot.actual, currency)}",
+            f"Differenza (effettivo − calcolato): {money(snapshot.difference, currency)}",
+            "Esito: " + ("confermata" if snapshot.difference == 0 else "da verificare"),
+            f"Movimenti completati dopo il {snapshot.opening_day}: {len(snapshot.movements)}",
+        ]
+        for date, count in snapshot.duplicates:
+            lines.append(f"Possibile duplicato il {date}: {count} movimenti con stessa descrizione e importo.")
+        if snapshot.difference and not snapshot.duplicates:
+            lines.append("Nessuna anomalia di duplicazione rilevata. La differenza richiede verifica sull'estratto.")
+        lines.extend(f"{row['occurred_at']} · {row['description']} · {money(row['amount'], currency)}"
+                     f" · Commissione {money(row['fee'], currency)}" for row in snapshot.movements)
+        content.configure(state="normal")
+        content.delete("1.0", "end")
+        content.insert("1.0", "\n".join(lines))
+        content.configure(state="disabled")
+        persist.configure(state="normal")
+
+    def persist_result():
+        if snapshot is not None:
+            save(lambda: save_reconciliation(db, snapshot), dialog)
+
+    def invalidate(*_):
+        persist.configure(state="disabled")
+
+    ttk.Button(dialog, text="Confronta", command=compare).grid(row=2, column=0, pady=8)
+    persist = ttk.Button(dialog, text="Salva esito", command=persist_result, state="disabled")
+    persist.grid(row=2, column=1, pady=8)
+    day.trace_add("write", invalidate)
+    amount.trace_add("write", invalidate)
+    dialog.rowconfigure(3, weight=1)
+
+
+def show_cash_entry(parent, db, account, save):
+    dialog = tk.Toplevel(parent)
+    dialog.title(f"Movimento di cassa · {account['name']}")
+    categories = {row["name"]: row["id"] for row in db.execute(
+        "SELECT id,name FROM categories WHERE archived=0 AND category_type IN ('entrata','uscita') ORDER BY name"
+    )}
+    fields = (
+        ("Data (AAAA-MM-GG)", "", ()),
+        ("Descrizione", "", ()),
+        (f"Importo in {account['currency']} (+ entrata, − uscita)", "", ()),
+        ("Categoria", "", ("", *categories)),
+        ("Sottovoce", "", ("",)),
+    )
+    day, description, amount, category, subcategory = form(dialog, fields)
+    sub_box = dialog.grid_slaves(row=4, column=1)[0]
+    subcategories = {}
+
+    def update_subcategories(*_):
+        subcategories.clear()
+        subcategories.update({row["name"]: row["id"] for row in db.execute(
+            "SELECT id,name FROM subcategories WHERE category_id=? AND archived=0 ORDER BY name",
+            (categories.get(category.get()),),
+        )})
+        sub_box.configure(values=("", *subcategories))
+        subcategory.set("")
+
+    category.trace_add("write", update_subcategories)
+    ttk.Label(dialog, text="Per un prelievo o versamento, lascia la categoria vuota e collega le due gambe dal registro.",
+              wraplength=450).grid(row=5, column=0, columnspan=2, padx=8)
+    ttk.Button(dialog, text="Registra", command=lambda: save(
+        lambda: record_cash_movement(db, account["id"], day.get(), description.get(), amount.get(),
+                                     categories.get(category.get()), subcategories.get(subcategory.get())), dialog,
+    )).grid(row=6, column=1, pady=8)
 
 
 def form(window, fields):

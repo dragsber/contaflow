@@ -100,16 +100,17 @@ class MovementRegister(ttk.Frame):
             messagebox.showinfo("Sottovoce","Seleziona i movimenti.",parent=self)
             return
         categories = {self.rows[str(identifier)]["category_id"] for identifier in selected}
-        if len(categories) != 1 or None in categories:
+        if len(categories) != 1:
             messagebox.showerror("Sottovoce","Seleziona movimenti con la stessa categoria.",parent=self)
             return
         rows = self.service.store.db.execute(
-            "SELECT id,name FROM subcategories WHERE category_id=? AND archived=0 ORDER BY name",
-            (next(iter(categories)),),
+            "SELECT s.id,s.name,c.name AS category FROM subcategories s JOIN categories c ON c.id=s.category_id "
+            "WHERE (? IS NULL OR s.category_id=?) AND s.archived=0 AND c.archived=0 ORDER BY c.name,s.name",
+            (next(iter(categories)),) * 2,
         ).fetchall()
         win = tk.Toplevel(self)
         win.title("Assegna sottovoce")
-        choices = {f"{r['id']} · {r['name']}":r["id"] for r in rows}
+        choices = {f"{r['category']} → {r['name']}": r["id"] for r in rows}
         value = tk.StringVar(value="Non ripartito")
         ttk.Combobox(win,textvariable=value,values=["Non ripartito"]+list(choices),state="readonly",width=55).pack(padx=12,pady=12)
         remember = tk.BooleanVar()
@@ -307,8 +308,20 @@ class MovementRegister(ttk.Frame):
                 "proposta": "proposta da verificare",
             }
             if row["supplier_id"] is not None:
-                reason = supplier_reasons.get(row["classification_origin"], "origine non registrata")
+                origin = row.get("supplier_origin")
+                if origin is None and row["classification_origin"] in ("alias", "regola", "proposta"):
+                    origin = row["classification_origin"]
+                reason = supplier_reasons.get(origin, "origine non registrata")
                 text += f"\nRiconoscimento fornitore: {reason}"
+            if row["subcategory_id"] is not None:
+                reasons = {
+                    "manuale": "selezione manuale",
+                    "regola": "regola futura confermata",
+                    "alias": "associazione dell'alias esatto",
+                    "abituale": "sottovoce abituale del fornitore",
+                    "associazione": "unica sottovoce associata",
+                }
+                text += "\nOrigine sottovoce: " + reasons.get(row.get("subcategory_origin"), "non registrata")
             counterpart = self.service.store.db.execute(
                 "SELECT t.amount,t.currency,t.fee,a.name FROM transfers l "
                 "JOIN transactions t ON t.id=CASE WHEN l.movement_out_id=? THEN l.movement_in_id ELSE l.movement_out_id END "

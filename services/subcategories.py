@@ -94,16 +94,24 @@ def assign(db, movement_ids, subcategory_id, *, remember=False, normalize=None):
         db.execute("BEGIN IMMEDIATE")
         selected = None
         if subcategory_id is not None:
-            selected = db.execute("SELECT * FROM subcategories WHERE id=? AND archived=0", (subcategory_id,)).fetchone()
+            selected = db.execute(
+                "SELECT s.* FROM subcategories s JOIN categories c ON c.id=s.category_id "
+                "WHERE s.id=? AND s.archived=0 AND c.archived=0", (subcategory_id,),
+            ).fetchone()
             if selected is None:
                 raise ValueError("Sottovoce non disponibile")
         for identifier in ids:
             old = db.execute("SELECT category_id,subcategory_id,description,classification_status,classification_origin FROM transactions WHERE id=?", (identifier,)).fetchone()
             if old is None:
                 raise ValueError("Movimento non trovato")
-            if selected and old["category_id"] != selected["category_id"]:
+            if selected and old["category_id"] not in (None, selected["category_id"]):
                 raise ValueError("La sottovoce deve appartenere alla categoria del movimento")
-            db.execute("UPDATE transactions SET subcategory_id=? WHERE id=?", (subcategory_id, identifier))
+            if selected and old["category_id"] is None:
+                db.execute("UPDATE transactions SET category_id=? WHERE id=?", (selected["category_id"], identifier))
+                db.execute("INSERT INTO audit(transaction_id,field,old_value,new_value) VALUES(?,'category_id','null',?)",
+                           (identifier, json.dumps(selected["category_id"])))
+            db.execute("UPDATE transactions SET subcategory_id=?,subcategory_origin=? WHERE id=?",
+                       (subcategory_id, "manuale" if selected else None, identifier))
             db.execute("INSERT INTO audit(transaction_id,field,old_value,new_value) VALUES(?,'subcategory_id',?,?)",
                        (identifier, json.dumps(old["subcategory_id"]), json.dumps(subcategory_id)))
             if selected and old["classification_status"] in ("in_attesa","proposto"):
@@ -124,6 +132,10 @@ def assign(db, movement_ids, subcategory_id, *, remember=False, normalize=None):
 
 
 def candidates(store, description, supplier_id):
+    return resolve_candidates(store, description, supplier_id)[0]
+
+
+def resolve_candidates(store, description, supplier_id):
     db = store.db
     key = store.normalize_description(description)
     rule = db.execute(
@@ -131,7 +143,7 @@ def candidates(store, description, supplier_id):
         "JOIN categories c ON c.id=s.category_id WHERE r.description=? AND s.archived=0 AND c.archived=0", (key,)
     ).fetchone()
     if rule:
-        return [rule[0]]
+        return [rule[0]], "regola"
     alias = db.execute("SELECT id FROM supplier_aliases WHERE normalized_alias=? AND archived=0 AND supplier_id=?",
                        (key, supplier_id)).fetchone()
     if alias:
@@ -140,13 +152,13 @@ def candidates(store, description, supplier_id):
             "JOIN categories c ON c.id=s.category_id WHERE a.alias_id=? AND s.archived=0 AND c.archived=0",(alias[0],)
         ).fetchall()
         if rows:
-            return [r[0] for r in rows]
+            return [r[0] for r in rows], "alias"
     rows = db.execute(
         "SELECT a.subcategory_id,a.habitual FROM supplier_subcategories a JOIN subcategories s ON s.id=a.subcategory_id "
         "JOIN categories c ON c.id=s.category_id WHERE a.supplier_id=? AND s.archived=0 AND c.archived=0",(supplier_id,)
     ).fetchall()
     preferred = [r[0] for r in rows if r[1]]
-    return preferred or [r[0] for r in rows]
+    return (preferred, "abituale") if preferred else ([r[0] for r in rows], "associazione")
 
 
 def archive(db, identifier, archived):
