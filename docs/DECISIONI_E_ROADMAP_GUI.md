@@ -6,8 +6,8 @@
 - **Obiettivo:** app desktop locale Windows per finanze personali, interfaccia italiana, semplice/intuitiva/moderna; preservare dati, backup e movimenti.
 - **Repository:** `dragsber/ContaFlow`; sviluppo su `codex/contaflow-sviluppo`; fetch HEAD remoto a ogni sessione.
 - **Riuso open source prima dello sviluppo da zero:** verificare licenze e compatibilità; incorporare solo quando c'è vantaggio concreto, senza riavviare il progetto o riscrivere servizi già collaudati.
-- **Primo riuso approvato:** `openpyxl` per la lettura XLSX. Controllare **sia** `adapters/chart.py` **sia** `services/catalog_import.py`: entrambi leggono ZIP/XML direttamente. Preservare interfacce, mapping, anteprima, conferme, audit, codici con zeri iniziali, formule bloccate, CSV e deduplicazione. Nessuna importazione automatica di dati personali.
-- **RapidFuzz:** candidato successivo, NON ancora approvato per integrazione; solo suggerimenti senza riclassificazione o fusione automatica.
+- **Decisione aggiornata (2026-11-06): sospendere l'integrazione di `openpyxl`** finché una prova isolata sul workbook reale non dimostri un vantaggio concreto. Il workbook è già stato ispezionato parzialmente, con formule, duplicati e riferimenti #REF!, ma non collaudato completamente nell'importazione. Se si riapre la valutazione, confrontare **sia** `adapters/chart.py` **sia** `services/catalog_import.py`, preservando interfacce, mapping, anteprima, conferme, audit, codici con zeri iniziali, CSV e deduplicazione. Controllare la fonte primaria di openpyxl su PyPI; nessuna dipendenza nuova senza beneficio dimostrato.
+- **RapidFuzz:** integrazione sospesa; confrontare prima la libreria standard `difflib`, specie con pochi alias. Valutare RapidFuzz solo se scala o qualità dei suggerimenti lo richiedono, sempre solo candidati e senza classificazione automatica.
 - **statement-normalizer, pdfplumber e altri parser:** verifiche ulteriori, non dichiararli compatibili con BPER senza campioni autorizzati.
 - **GUI:** l'utente giudica la GUI attuale vecchia e poco gradevole. Vuole un'esperienza semplice, intuitiva e moderna. Valutare opzioni in parallelo alla fase Excel; nessuna migrazione globale del toolkit senza nuovo collaudo e approvazione.
 - **Sicurezza:** non committare dati bancari, workbook personali, database, log, token o backup. Nessuna migrazione database necessaria per integrare un lettore XLSX o tema grafico.
@@ -49,7 +49,7 @@ Verifiche documentali: PyPI/README consultati il 2026-11-06. Non sono stati inst
 
 **UI-0 (solo analisi, questo documento):** inventario dei problemi, alternative e UX target.
 
-**UI-1 (prototipo isolato, dopo autorizzazione):** schermata Panoramica e Registro su soli dati sintetici con due temi alternativi (ttkbootstrap e sv-ttk o ttk nativo); nessuna migrazione del DB, confronto a fianco della GUI attuale; verificare Tk 3.12 e bundle onedir.
+**UI-1 (prototipo isolato, dopo autorizzazione, priorità corrente):** schermata Panoramica e Registro su soli dati sintetici con due temi alternativi (ttkbootstrap e sv-ttk o ttk nativo); nessuna migrazione del DB, confronto a fianco della GUI attuale; verificare Tk 3.12 e bundle onedir.
 
 **UI-2 (incremento graduale):** design system, layout e gerarchia visiva; prima Panoramica e Movimenti, poi Importazioni, poi Organizza/Budget. Non cambiare il backend. Conservare controlli, scorciatoie e semantica esistenti.
 
@@ -57,8 +57,8 @@ Verifiche documentali: PyPI/README consultati il 2026-11-06. Non sono stati inst
 
 ## Ripresa delle prossime sessioni
 1. `git fetch`, verifica HEAD del branch e `STATO_SVILUPPO.md`, poi leggi questo documento e `docs/RIUSO_OPEN_SOURCE.md`.
-2. Verifica se l'integrazione `openpyxl` è stata eseguita **su entrambi** i percorsi XLSX e se i test/EXE Windows sono stati davvero eseguiti. Non dichiararla completata per la sola documentazione.
-3. Se il primo intervento è chiuso, proponi collaudo Windows e selezione del prototipo grafico; per la GUI evita riscritture globali.
+2. **Non integrare per ora** `openpyxl` o RapidFuzz: sono sospesi in attesa di esigenze comprovate. Per Excel attendere collaudo sul workbook originale; per BPER attendere un estratto anonimizzato; per somiglianza confrontare prima `difflib`.
+3. **Priorità: valutare e proporre una GUI moderna, semplice e intuitiva**, con prototipo isolato prima di una migrazione globale. Verificare Windows/PyInstaller e preservare servizi e test.
 4. Successivamente valuta RapidFuzz (richiede approvazione), parser OFX/CAMT e BPER (campione reale autorizzato), PDF digitale.
 5. Per ogni decisione successiva aggiorna qui la sezione corrispondente, `STATO_SVILUPPO.md` e le istruzioni `AGENTS.md`.
 
