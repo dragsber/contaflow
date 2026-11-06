@@ -481,12 +481,14 @@ e collaudare prima il portable con dati sintetici.
 
 ## Ricerca riuso open source — 6 novembre 2026
 
-Analizzato l'HEAD remoto `33109d75989aa012539155162cf98c7ee022f643` e inventariati
-moduli e lacune. Documento `docs/RIUSO_OPEN_SOURCE.md`: classifica, licenze,
-dipendenze, compatibilità dichiarate/non verificate e proposte circoscritte.
-Nessun pacchetto aggiunto o eseguito. Proposte ADOTTARE non ancora integrate:
-openpyxl per sostituire parte del lettore XLSX manuale e RapidFuzz per soli
-suggerimenti di fornitori; entrambe richiedono conferma e collaudo Windows con
-PyInstaller onedir. Parser OFX/PDF/CAMT da valutare dopo disponibilità di
-campioni bancari autorizzati. Nessuna regressione o suite eseguita in questo
-compito documentale.
+Audit aggiornato all'HEAD remoto `f071337abb338eeb6fc25a654cfff2ec2bd56ae4`.
+Il documento `docs/RIUSO_OPEN_SOURCE.md` inventaria i moduli effettivi, confronta
+stime di sviluppo autonomo e integrazione, analizza 15 candidati e approfondisce
+gli 8 più promettenti. Raccomandazioni circoscritte: openpyxl per il lettore
+XLSX manuale e RapidFuzz esclusivamente per suggerimenti non automatici, entrambe
+da approvare e collaudare su Windows/PyInstaller prima di integrarle. I parser
+PDF e bancari restano da valutare su formati autorizzati; i candidati giovani
+multi-formato sono solo da studiare. Nessuna dipendenza installata o codice di
+terzi eseguito; nessun database toccato; suite ContaFlow non eseguita nel compito
+documentale. La proposta di regola permanente per verificare il riuso open source
+resta da approvare dall'utente.
