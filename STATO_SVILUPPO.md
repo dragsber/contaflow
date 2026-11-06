@@ -478,3 +478,15 @@ Prima di aprire la nuova versione sul PC di casa, copiare a parte il database Al
 da %LOCALAPPDATA%\ContaFlow a programma chiuso. La nuova versione creerà comunque
 una copia automatica verificata prima della migrazione. Compilare con build_windows.bat
 e collaudare prima il portable con dati sintetici.
+
+## Ricerca riuso open source — 6 novembre 2026
+
+Analizzato l'HEAD remoto `33109d75989aa012539155162cf98c7ee022f643` e inventariati
+moduli e lacune. Documento `docs/RIUSO_OPEN_SOURCE.md`: classifica, licenze,
+dipendenze, compatibilità dichiarate/non verificate e proposte circoscritte.
+Nessun pacchetto aggiunto o eseguito. Proposte ADOTTARE non ancora integrate:
+openpyxl per sostituire parte del lettore XLSX manuale e RapidFuzz per soli
+suggerimenti di fornitori; entrambe richiedono conferma e collaudo Windows con
+PyInstaller onedir. Parser OFX/PDF/CAMT da valutare dopo disponibilità di
+campioni bancari autorizzati. Nessuna regressione o suite eseguita in questo
+compito documentale.
