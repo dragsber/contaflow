@@ -504,3 +504,11 @@ multi-formato sono solo da studiare. Nessuna dipendenza installata o codice di
 terzi eseguito; nessun database toccato; suite ContaFlow non eseguita nel compito
 documentale. La proposta di regola permanente per verificare il riuso open source
 resta da approvare dall'utente.
+
+
+## Playbook ricorrenti — scheletro
+
+Creato lo scheletro in `playbooks/`: procedura, modello vuoto e indice. Tutti i
+playbook sono ancora `da creare`; i contenuti nasceranno da interviste con
+l'utente. Codex rileva le skills di progetto da `.agents/skills/`, non da
+`playbooks/`; il README spiega il wrapper per collegare solo procedure approvate.
